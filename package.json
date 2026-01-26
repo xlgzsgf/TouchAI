@@ -21,9 +21,14 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@tailwindcss/vite": "^4.1.18",
     "@tauri-apps/api": "^2.8.0",
     "@tauri-apps/plugin-global-shortcut": "^2.3.0",
+    "@tauri-apps/plugin-sql": "^2.3.1",
+    "kysely": "^0.28.10",
+    "marked": "^17.0.1",
+    "openai": "^6.16.0",
     "tailwindcss": "^4.1.18",
     "vue": "^3.5.13",
     "vue-router": "4"

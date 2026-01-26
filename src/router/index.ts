@@ -3,12 +3,18 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
 import SearchView from '@/views/SearchView.vue';
+import SettingsView from '@/views/SettingsView.vue';
 
 const routes = [
     {
         path: '/',
         name: 'Search',
         component: SearchView,
+    },
+    {
+        path: '/settings',
+        name: 'Settings',
+        component: SettingsView,
     },
 ];
 

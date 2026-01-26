@@ -12,21 +12,37 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "TouchAI",
         "width": 650,
         "height": 60,
+        "minWidth": 650,
+        "minHeight": 60,
+        "maxHeight": 700,
         "decorations": false,
         "transparent": true,
         "center": true,
-        "resizable": false,
+        "resizable": true,
         "focus": true,
-        "visible":false,
+        "visible": false,
         "alwaysOnTop": true,
         "skipTaskbar": true
       }
     ],
     "security": {
       "csp": null
+    }
+  },
+  "plugins": {
+    "sql": {
+      "preload": ["sqlite:touchai.db"],
+      "scope": {
+        "allowed": [
+          {
+            "path": "$APPDATA/touchai.db"
+          }
+        ]
+      }
     }
   },
   "bundle": {

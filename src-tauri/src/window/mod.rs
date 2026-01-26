@@ -7,7 +7,7 @@
 use tauri::{Manager, WindowEvent};
 
 /// 设置窗口事件监听器
-/// 当窗口失去焦点时自动隐藏窗口
+/// 当窗口失去焦点时自动隐藏窗口（保持当前大小）
 pub fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let main_window = app.get_webview_window("main")
         .ok_or("Failed to get main window")?;
@@ -16,6 +16,7 @@ pub fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::erro
 
     main_window.on_window_event(move |event| {
         if let WindowEvent::Focused(false) = event {
+            // 只隐藏窗口，不重置大小
             let _ = search_window_clone.hide();
         }
     });
