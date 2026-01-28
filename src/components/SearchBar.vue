@@ -1,7 +1,7 @@
 <template>
-    <div class="mx-auto h-[56px] w-full" @click="focus">
+    <div class="mx-auto h-[56px] w-full select-none" @click="focus">
         <div
-            class="relative flex h-full items-center gap-5 rounded-lg bg-white/98 p-3 backdrop-blur-sm transition-all duration-250 ease-in-out"
+            class="bg-background-primary relative flex h-full items-center gap-5 rounded-lg border border-gray-300 p-3 backdrop-blur-sm backdrop-blur-xl transition-all duration-250 ease-in-out"
         >
             <div class="flex items-center justify-center">
                 <img src="@assets/logo_word.svg" alt="search" class="h-5 w-15 select-none" />
@@ -11,21 +11,25 @@
                 v-model="searchQuery"
                 type="text"
                 autofocus
+                :readonly="disabled"
                 :placeholder="placeholder"
-                class="flex-1 cursor-default border-0 bg-transparent font-sans text-lg text-black/90 caret-gray-500 outline-none placeholder:text-black/30 placeholder:select-none"
+                :class="[
+                    'flex-1 cursor-default border-0 bg-transparent font-sans text-lg caret-gray-500 outline-none placeholder:text-gray-400 placeholder:select-none',
+                    disabled ? 'text-gray-400' : 'text-gray-900',
+                ]"
                 @input="onSearch"
                 @keydown.enter="onEnter"
             />
             <div
                 v-if="searchQuery"
-                class="ml-2 flex cursor-pointer items-center text-black/30 transition-colors duration-200 hover:text-black/60"
+                class="ml-2 flex cursor-pointer items-center text-gray-400 transition-colors duration-200 hover:text-gray-600"
                 data-tauri-drag-region="false"
                 @click="clearSearch"
             >
                 <img src="@assets/icons/clear.svg" alt="clear" class="h-5 w-5" />
             </div>
             <div
-                class="ml-2 flex cursor-pointer items-center text-black/30 transition-colors duration-200 hover:text-black/60"
+                class="ml-2 flex cursor-pointer items-center text-gray-400 transition-colors duration-200 hover:text-gray-600"
                 data-tauri-drag-region="false"
                 title="设置"
                 @click="openSettings"
@@ -61,6 +65,14 @@
     import { invoke } from '@tauri-apps/api/core';
     import { ref } from 'vue';
 
+    interface Props {
+        disabled?: boolean;
+    }
+
+    const props = withDefaults(defineProps<Props>(), {
+        disabled: false,
+    });
+
     const placeholder = '写下你的需求...';
 
     const searchQuery = ref('');
@@ -69,6 +81,7 @@
     const emit = defineEmits<{
         search: [query: string];
         submit: [query: string];
+        clear: [];
     }>();
 
     function onSearch() {
@@ -76,7 +89,8 @@
     }
 
     function onEnter() {
-        if (!searchQuery.value.trim()) {
+        // 如果禁用状态或输入为空，不处理
+        if (props.disabled || !searchQuery.value.trim()) {
             return;
         }
 
@@ -86,7 +100,11 @@
 
     function clearSearch() {
         searchQuery.value = '';
-        emit('search', '');
+        emit('clear');
+    }
+
+    function clearInput() {
+        searchQuery.value = '';
     }
 
     async function focus() {
@@ -103,6 +121,7 @@
 
     defineExpose({
         focus,
+        clearInput,
     });
 </script>
 

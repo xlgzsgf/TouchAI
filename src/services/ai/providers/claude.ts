@@ -8,6 +8,7 @@ import type {
     AiRequestOptions,
     AiResponse,
     AiStreamChunk,
+    ModelInfo,
 } from '../types';
 
 export class ClaudeProvider implements AiProvider {
@@ -52,8 +53,20 @@ export class ClaudeProvider implements AiProvider {
         });
 
         for await (const event of stream) {
-            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-                yield { content: event.delta.text, done: false };
+            // 处理 thinking 内容块（extended thinking）
+            if (event.type === 'content_block_start' && event.content_block.type === 'thinking') {
+                // thinking 块开始，不需要特殊处理
+                continue;
+            }
+
+            if (event.type === 'content_block_delta') {
+                if (event.delta.type === 'thinking_delta') {
+                    // 推理内容流式输出
+                    yield { content: '', reasoning: event.delta.thinking, done: false };
+                } else if (event.delta.type === 'text_delta') {
+                    // 正常文本内容
+                    yield { content: event.delta.text, done: false };
+                }
             } else if (event.type === 'message_stop') {
                 yield { content: '', done: true };
                 return;
@@ -72,5 +85,13 @@ export class ClaudeProvider implements AiProvider {
         } catch {
             return false;
         }
+    }
+
+    async listModels(): Promise<ModelInfo[]> {
+        const response = await this.client.models.list();
+        return response.data.map((model) => ({
+            id: model.id,
+            name: model.display_name || model.id,
+        }));
     }
 }

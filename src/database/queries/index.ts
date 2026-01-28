@@ -3,5 +3,6 @@
 export * from './ai_requests';
 export * from './messages';
 export * from './models';
+export * from './providers';
 export * from './sessions';
 export * from './settings';

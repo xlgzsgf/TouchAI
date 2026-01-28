@@ -14,15 +14,16 @@
       {
         "label": "main",
         "title": "TouchAI",
-        "width": 650,
+        "width": 750,
         "height": 60,
-        "minWidth": 650,
+        "minWidth": 750,
         "minHeight": 60,
         "maxHeight": 700,
         "decorations": false,
+        "shadow": false,
         "transparent": true,
         "center": true,
-        "resizable": true,
+        "resizable": false,
         "focus": true,
         "visible": false,
         "alwaysOnTop": true,
@@ -30,16 +31,17 @@
       }
     ],
     "security": {
-      "csp": null
-    }
+      "csp": null,
+      "dangerousDisableAssetCspModification": true
+    },
+    "withGlobalTauri": true
   },
   "plugins": {
     "sql": {
-      "preload": ["sqlite:touchai.db"],
       "scope": {
         "allowed": [
           {
-            "path": "$APPDATA/touchai.db"
+            "path": "data/touchai.db"
           }
         ]
       }

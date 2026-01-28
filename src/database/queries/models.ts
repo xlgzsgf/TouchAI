@@ -12,22 +12,35 @@ export const findModelById = (id: number) =>
     db.getKysely().selectFrom('models').selectAll().where('id', '=', id).executeTakeFirst();
 
 /**
- * 查找所有启用的模型（按优先级降序）
+ * 查找全局默认模型
  */
-export const findEnabledModelsByPriority = () =>
+export const findDefaultModel = () =>
+    db.getKysely().selectFrom('models').selectAll().where('is_default', '=', 1).executeTakeFirst();
+
+/**
+ * 查找模型并关联服务商信息（JOIN 查询）
+ */
+export const findModelsWithProvider = () =>
     db
         .getKysely()
         .selectFrom('models')
-        .selectAll()
-        .where('enabled', '=', 1)
-        .orderBy('priority', 'desc')
+        .innerJoin('providers', 'providers.id', 'models.provider_id')
+        .selectAll('models')
+        .select([
+            'providers.name as provider_name',
+            'providers.type as provider_type',
+            'providers.api_endpoint',
+            'providers.api_key',
+            'providers.enabled as provider_enabled',
+            'providers.logo as provider_logo',
+        ])
         .execute();
 
 /**
- * 根据类型查找模型
+ * 根据服务商 ID 查找模型
  */
-export const findModelsByType = (type: 'openai' | 'claude' | 'ollama') =>
-    db.getKysely().selectFrom('models').selectAll().where('type', '=', type).execute();
+export const findModelsByProviderId = (providerId: number) =>
+    db.getKysely().selectFrom('models').selectAll().where('provider_id', '=', providerId).execute();
 
 /**
  * 查找所有模型
@@ -86,6 +99,60 @@ export const updateModel = async (id: number, data: ModelUpdate): Promise<Update
  */
 export const updateModelLastUsed = (id: number) =>
     updateModel(id, { last_used_at: new Date().toISOString() });
+
+/**
+ * 设置全局默认模型
+ * 使用事务确保只有一个默认模型
+ * 验证：模型所属的服务商必须已启用
+ */
+export const setDefaultModel = async (modelId: number): Promise<void> => {
+    // 检查模型是否存在以及服务商是否启用
+    const modelWithProvider = await db
+        .getKysely()
+        .selectFrom('models')
+        .innerJoin('providers', 'providers.id', 'models.provider_id')
+        .select(['models.id', 'providers.enabled', 'providers.name as provider_name'])
+        .where('models.id', '=', modelId)
+        .executeTakeFirst();
+
+    if (!modelWithProvider) {
+        throw new Error('模型不存在');
+    }
+
+    if (modelWithProvider.enabled === 0) {
+        throw new Error(`无法设置默认模型：服务商 "${modelWithProvider.provider_name}" 未启用`);
+    }
+
+    await db
+        .getKysely()
+        .transaction()
+        .execute(async (trx) => {
+            // 取消所有默认设置
+            await trx.updateTable('models').set({ is_default: 0 }).execute();
+
+            // 设置新的默认模型
+            await trx
+                .updateTable('models')
+                .set({ is_default: 1 })
+                .where('id', '=', modelId)
+                .execute();
+        });
+};
+
+/**
+ * 检查服务商是否有默认模型
+ */
+export const providerHasDefaultModel = async (providerId: number): Promise<boolean> => {
+    const model = await db
+        .getKysely()
+        .selectFrom('models')
+        .select('id')
+        .where('provider_id', '=', providerId)
+        .where('is_default', '=', 1)
+        .executeTakeFirst();
+
+    return !!model;
+};
 
 /**
  * 删除模型

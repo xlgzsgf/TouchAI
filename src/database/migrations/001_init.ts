@@ -31,6 +31,25 @@ export const init001: Migration = {
         ).execute();
         await createUpdateTrigger(kysely, 'settings');
 
+        // 创建 providers 表
+        await withTimestamps(
+            kysely.schema
+                .createTable('providers')
+                .ifNotExists()
+                .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+                .addColumn('name', 'text', (col) => col.notNull())
+                .addColumn('type', 'text', (col) => col.notNull())
+                .addColumn('api_endpoint', 'text', (col) => col.notNull())
+                .addColumn('api_key', 'text')
+                .addColumn('logo', 'text', (col) => col.notNull())
+                .addColumn('enabled', 'integer', (col) => col.notNull().defaultTo(1))
+                .addColumn('is_builtin', 'integer', (col) => col.notNull().defaultTo(0))
+        ).execute();
+        await createUpdateTrigger(kysely, 'providers');
+        await createIndex(kysely, 'idx_providers_type', 'providers', ['type']);
+        await createIndex(kysely, 'idx_providers_enabled', 'providers', ['enabled']);
+        await createIndex(kysely, 'idx_providers_is_builtin', 'providers', ['is_builtin']);
+
         // 创建会话表
         await withTimestamps(
             kysely.schema
@@ -67,22 +86,19 @@ export const init001: Migration = {
                 .createTable('models')
                 .ifNotExists()
                 .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+                .addColumn('provider_id', 'integer', (col) =>
+                    col.notNull().references('providers.id').onDelete('cascade')
+                )
                 .addColumn('name', 'text', (col) => col.notNull())
                 .addColumn('model_id', 'text', (col) => col.notNull())
-                .addColumn('type', 'text', (col) => col.notNull())
-                .addColumn('priority', 'integer', (col) => col.notNull().defaultTo(0))
-                .addColumn('api_endpoint', 'text')
-                .addColumn('api_key', 'text')
+                .addColumn('is_default', 'integer', (col) => col.notNull().defaultTo(0))
                 .addColumn('max_tokens', 'integer')
                 .addColumn('temperature', 'real')
-                .addColumn('enabled', 'integer', (col) => col.notNull().defaultTo(0))
                 .addColumn('last_used_at', 'text')
-                .addColumn('description', 'text')
         ).execute();
         await createUpdateTrigger(kysely, 'models');
-        await createIndex(kysely, 'idx_models_type', 'models', ['type']);
-        await createIndex(kysely, 'idx_models_priority', 'models', ['priority']);
-        await createIndex(kysely, 'idx_models_enabled', 'models', ['enabled']);
+        await createIndex(kysely, 'idx_models_provider_id', 'models', ['provider_id']);
+        await createIndex(kysely, 'idx_models_is_default', 'models', ['is_default']);
 
         // 创建 ai_requests 表
         await withTimestamps(
@@ -123,52 +139,123 @@ export const init001: Migration = {
             await kysely.insertInto('settings').values(settingsToInsert).execute();
         }
 
-        // 插入默认模型（如果不存在）
-        const existingModels = await kysely.selectFrom('models').select('model_id').execute();
-
-        const existingModelIds = new Set(existingModels.map((m) => m.model_id));
-        const defaultModels: Array<{
-            name: string;
-            model_id: string;
-            type: 'openai' | 'claude' | 'ollama';
-            priority: number;
-            api_endpoint: string;
-            enabled: number;
-            description: string;
-        }> = [
+        // 插入内置服务商和模型
+        const BUILTIN_PROVIDERS = [
             {
-                name: 'GPT-4',
-                model_id: 'gpt-4',
+                name: 'OpenAI',
                 type: 'openai',
-                priority: 100,
-                api_endpoint: 'https://api.openai.com/v1',
-                enabled: 1, // 默认启用
-                description: 'OpenAI GPT-4 model',
+                api_endpoint: 'https://api.openai.com',
+                logo: 'openai.png',
+                enabled: 1,
+                is_builtin: 1,
             },
             {
-                name: 'Claude Sonnet 4',
-                model_id: 'claude-sonnet-4-20250514',
+                name: 'Claude',
                 type: 'claude',
-                priority: 90,
-                api_endpoint: 'https://api.anthropic.com/v1',
+                api_endpoint: 'https://api.anthropic.com',
+                logo: 'claude.png',
                 enabled: 0,
-                description: 'Anthropic Claude Sonnet 4',
+                is_builtin: 1,
             },
             {
-                name: 'Ollama Llama 3',
-                model_id: 'llama3',
-                type: 'ollama',
-                priority: 80,
-                api_endpoint: 'http://localhost:11434',
+                name: 'DeepSeek',
+                type: 'openai',
+                api_endpoint: 'https://api.deepseek.com',
+                logo: 'deepseek.png',
                 enabled: 0,
-                description: 'Local Ollama Llama 3 model',
+                is_builtin: 1,
+            },
+            {
+                name: 'Doubao',
+                type: 'openai',
+                api_endpoint: 'https://ark.cn-beijing.volces.com/api/v3',
+                logo: 'doubao.png',
+                enabled: 0,
+                is_builtin: 1,
+            },
+            {
+                name: 'Gemini',
+                type: 'openai',
+                api_endpoint: 'https://generativelanguage.googleapis.com',
+                logo: 'gemini.png',
+                enabled: 0,
+                is_builtin: 1,
+            },
+            {
+                name: 'Grok',
+                type: 'openai',
+                api_endpoint: 'https://api.x.ai',
+                logo: 'grok.png',
+                enabled: 0,
+                is_builtin: 1,
+            },
+            {
+                name: 'Hunyuan',
+                type: 'openai',
+                api_endpoint: 'https://api.hunyuan.cloud.tencent.com',
+                logo: 'hunyuan.png',
+                enabled: 0,
+                is_builtin: 1,
+            },
+            {
+                name: 'Llama',
+                type: 'openai',
+                api_endpoint: 'https://api.together.xyz',
+                logo: 'llama.png',
+                enabled: 0,
+                is_builtin: 1,
+            },
+            {
+                name: 'MiniMax',
+                type: 'openai',
+                api_endpoint: 'https://api.minimax.chat',
+                logo: 'minimax.png',
+                enabled: 0,
+                is_builtin: 1,
+            },
+            {
+                name: 'Moonshot',
+                type: 'openai',
+                api_endpoint: 'https://api.moonshot.cn',
+                logo: 'moonshot.png',
+                enabled: 0,
+                is_builtin: 1,
+            },
+            {
+                name: 'Qwen',
+                type: 'openai',
+                api_endpoint: 'https://dashscope.aliyuncs.com/compatible-mode',
+                logo: 'qwen.png',
+                enabled: 0,
+                is_builtin: 1,
+            },
+            {
+                name: 'Zhipu',
+                type: 'openai',
+                api_endpoint: 'https://open.bigmodel.cn/api/paas',
+                logo: 'zhipu.png',
+                enabled: 0,
+                is_builtin: 1,
             },
         ];
 
-        const modelsToInsert = defaultModels.filter((m) => !existingModelIds.has(m.model_id));
+        const existingProviders = await kysely.selectFrom('providers').select('name').execute();
 
-        if (modelsToInsert.length > 0) {
-            await kysely.insertInto('models').values(modelsToInsert).execute();
+        if (existingProviders.length === 0) {
+            for (const provider of BUILTIN_PROVIDERS) {
+                await db.execute(
+                    `INSERT INTO providers (name, type, api_endpoint, logo, enabled, is_builtin)
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [
+                        provider.name,
+                        provider.type,
+                        provider.api_endpoint,
+                        provider.logo,
+                        provider.enabled,
+                        provider.is_builtin,
+                    ]
+                );
+            }
         }
 
         console.log('Migration 001: Database initialized');
@@ -186,11 +273,17 @@ export const init001: Migration = {
         await kysely.schema.dropTable('ai_requests').ifExists().execute();
 
         // 删除 models 表
-        await kysely.schema.dropIndex('idx_models_enabled').ifExists().execute();
-        await kysely.schema.dropIndex('idx_models_priority').ifExists().execute();
-        await kysely.schema.dropIndex('idx_models_type').ifExists().execute();
+        await kysely.schema.dropIndex('idx_models_is_default').ifExists().execute();
+        await kysely.schema.dropIndex('idx_models_provider_id').ifExists().execute();
         await dropUpdateTrigger(kysely, 'models');
         await kysely.schema.dropTable('models').ifExists().execute();
+
+        // 删除 providers 表
+        await kysely.schema.dropIndex('idx_providers_is_builtin').ifExists().execute();
+        await kysely.schema.dropIndex('idx_providers_enabled').ifExists().execute();
+        await kysely.schema.dropIndex('idx_providers_type').ifExists().execute();
+        await dropUpdateTrigger(kysely, 'providers');
+        await kysely.schema.dropTable('providers').ifExists().execute();
 
         // 删除消息表
         await kysely.schema.dropIndex('idx_messages_role').ifExists().execute();

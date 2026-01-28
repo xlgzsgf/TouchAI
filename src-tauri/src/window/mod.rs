@@ -8,9 +8,10 @@ use tauri::{Manager, WindowEvent};
 
 /// 设置窗口事件监听器
 /// 当窗口失去焦点时自动隐藏窗口（保持当前大小）
-pub fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let main_window = app.get_webview_window("main")
-        .ok_or("Failed to get main window")?;
+pub fn setup_window_events(_app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let main_window = _app
+                .get_webview_window("main")
+                .ok_or("Failed to get main window")?;
 
     let search_window_clone = main_window.clone();
 
@@ -20,15 +21,5 @@ pub fn setup_window_events(app: &mut tauri::App) -> Result<(), Box<dyn std::erro
             let _ = search_window_clone.hide();
         }
     });
-
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_module_compilation() {
-        // 简单测试确保模块可以被正确导入和编译
-        assert!(true);
-    }
 }

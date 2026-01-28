@@ -6,6 +6,7 @@ import type {
     AiRequestOptions,
     AiResponse,
     AiStreamChunk,
+    ModelInfo,
 } from '../types';
 
 export class OllamaProvider implements AiProvider {
@@ -103,6 +104,24 @@ export class OllamaProvider implements AiProvider {
             return response.ok;
         } catch {
             return false;
+        }
+    }
+
+    async listModels(): Promise<ModelInfo[]> {
+        try {
+            const response = await fetch(`${this.config.apiEndpoint}/api/tags`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return (data.models || []).map((model: { name: string }) => ({
+                id: model.name,
+                name: model.name,
+            }));
+        } catch (error) {
+            console.error('Failed to fetch Ollama models:', error);
+            throw new Error('无法获取 Ollama 模型列表');
         }
     }
 }

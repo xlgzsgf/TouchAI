@@ -20,6 +20,7 @@ export interface AiRequestOptions {
 
 export interface AiStreamChunk {
     content: string;
+    reasoning?: string; // 推理内容（thinking process）
     done: boolean;
 }
 
@@ -27,6 +28,11 @@ export interface AiResponse {
     content: string;
     tokensUsed?: number;
     finishReason?: string;
+}
+
+export interface ModelInfo {
+    id: string;
+    name: string;
 }
 
 export interface AiProvider {
@@ -47,6 +53,11 @@ export interface AiProvider {
      * 测试连接
      */
     testConnection(): Promise<boolean>;
+
+    /**
+     * 获取可用模型列表
+     */
+    listModels(): Promise<ModelInfo[]>;
 }
 
 export interface AiProviderConfig {

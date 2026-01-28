@@ -8,7 +8,7 @@ import { createTauriSqlDialect } from '../dialect';
 import type { Database as DatabaseSchema, Migration, MigrationRecord } from '../schema';
 import { migrations } from './index';
 
-// Migration table schema
+// 迁移表结构
 interface MigrationsTable {
     id: Generated<number>;
     version: number;

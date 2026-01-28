@@ -46,5 +46,8 @@ export default defineConfig([
                 parser: eslint_ts.parser,
             },
         },
+        rules: {
+            'vue/no-v-html': 'off',
+        },
     },
 ])

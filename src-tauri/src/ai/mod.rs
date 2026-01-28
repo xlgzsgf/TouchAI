@@ -12,10 +12,10 @@ pub async fn resize_window_for_response(app: AppHandle, height: u32) -> Result<(
         .ok_or("Failed to get main window")?;
 
     // 使用 LogicalSize 而不是 PhysicalSize，以正确处理 DPI 缩放
-    // 固定宽度为 650，只改变高度
+    // 固定宽度为 750，只改变高度
     window
         .set_size(tauri::Size::Logical(tauri::LogicalSize {
-            width: 650.0,
+            width: 750.0,
             height: height as f64,
         }))
         .map_err(|e| e.to_string())?;

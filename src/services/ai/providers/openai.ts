@@ -8,6 +8,7 @@ import type {
     AiRequestOptions,
     AiResponse,
     AiStreamChunk,
+    ModelInfo,
 } from '../types';
 
 export class OpenAiProvider implements AiProvider {
@@ -52,8 +53,18 @@ export class OpenAiProvider implements AiProvider {
         });
 
         for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content || '';
+            //官方客户端没有提供Reasoning的类型，做适配
+            const delta = chunk.choices[0]?.delta as {
+                reasoning_content?: string;
+            } & OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta;
+
+            const content = delta?.content || '';
+            const reasoning = delta?.reasoning_content || '';
             const finishReason = chunk.choices[0]?.finish_reason;
+
+            if (reasoning) {
+                yield { content: '', reasoning, done: false };
+            }
 
             if (content) {
                 yield { content, done: false };
@@ -73,5 +84,13 @@ export class OpenAiProvider implements AiProvider {
         } catch {
             return false;
         }
+    }
+
+    async listModels(): Promise<ModelInfo[]> {
+        const response = await this.client.models.list();
+        return response.data.map((model) => ({
+            id: model.id,
+            name: model.id,
+        }));
     }
 }

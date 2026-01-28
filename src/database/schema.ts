@@ -103,21 +103,33 @@ export interface SettingsTable {
 }
 
 /**
+ * AI 服务商表
+ */
+export interface ProvidersTable {
+    id: Generated<number>;
+    name: string;
+    type: 'openai' | 'claude';
+    api_endpoint: string;
+    api_key: string | null;
+    logo: string;
+    enabled: number;
+    is_builtin: number;
+    created_at: Generated<string>;
+    updated_at: Generated<string>;
+}
+
+/**
  * AI 模型表
  */
 export interface ModelsTable {
     id: Generated<number>;
+    provider_id: number;
     name: string;
     model_id: string;
-    type: 'openai' | 'claude' | 'ollama';
-    priority: number;
-    api_endpoint: string | null;
-    api_key: string | null;
+    is_default: number;
     max_tokens: number | null;
     temperature: number | null;
-    enabled: number;
     last_used_at: string | null;
-    description: string | null;
     created_at: Generated<string>;
     updated_at: Generated<string>;
 }
@@ -131,7 +143,7 @@ export interface AiRequestsTable {
     model_id: number;
     prompt: string;
     response: string | null;
-    status: 'pending' | 'streaming' | 'completed' | 'failed';
+    status: 'pending' | 'streaming' | 'completed' | 'failed' | 'cancelled';
     error_message: string | null;
     tokens_used: number | null;
     duration_ms: number | null;
@@ -146,6 +158,7 @@ export interface Database {
     sessions: SessionsTable;
     messages: MessagesTable;
     settings: SettingsTable;
+    providers: ProvidersTable;
     models: ModelsTable;
     ai_requests: AiRequestsTable;
 }
@@ -164,6 +177,10 @@ export type Setting = Selectable<SettingsTable>;
 export type NewSetting = Insertable<SettingsTable>;
 export type SettingUpdate = Updateable<SettingsTable>;
 
+export type Provider = Selectable<ProvidersTable>;
+export type NewProvider = Insertable<ProvidersTable>;
+export type ProviderUpdate = Updateable<ProvidersTable>;
+
 export type Model = Selectable<ModelsTable>;
 export type NewModel = Insertable<ModelsTable>;
 export type ModelUpdate = Updateable<ModelsTable>;
@@ -173,5 +190,5 @@ export type NewAiRequest = Insertable<AiRequestsTable>;
 export type AiRequestUpdate = Updateable<AiRequestsTable>;
 
 export type MessageRole = MessagesTable['role'];
-export type ModelType = ModelsTable['type'];
+export type ProviderType = ProvidersTable['type'];
 export type RequestStatus = AiRequestsTable['status'];

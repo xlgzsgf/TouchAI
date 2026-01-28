@@ -2,6 +2,7 @@
  * Copyright (c) 2025. 千诚. Licensed under GPL v3.
  */
 
+@config '@/../tailwind.config.js';
 @import 'tailwindcss';
 
 @theme {
@@ -11,6 +12,34 @@
 
 /* 全局基础样式 - 使用 Tailwind 的方式 */
 @layer base {
+    /* CSS 变量定义 - 用于语义化颜色管理，便于未来支持主题切换 */
+    :root {
+        /* 文本颜色 */
+        --color-text-primary: #111827; /* gray-900 - 主要文本 */
+        --color-text-secondary: #4b5563; /* gray-600 - 次要文本 */
+        --color-text-tertiary: #9ca3af; /* gray-400 - 辅助文本 */
+        --color-text-disabled: #d1d5db; /* gray-300 - 禁用文本 */
+
+        /* 背景颜色 */
+        --color-bg-primary: #ffffff; /* white - 主背景 */
+        --color-bg-secondary: #f9fafb; /* gray-50 - 次背景 */
+        --color-bg-tertiary: #f3f4f6; /* gray-100 - 辅助背景 */
+
+        /* 边框颜色 */
+        --color-border-primary: #e5e7eb; /* gray-200 - 主边框 */
+        --color-border-secondary: #d1d5db; /* gray-300 - 次边框 */
+
+        /* 代码块颜色 */
+        --color-code-bg: #f3f4f6; /* gray-100 - 内联代码背景 */
+        --color-code-text: #111827; /* gray-900 - 内联代码文本 */
+        --color-code-block-bg: #1f2937; /* gray-800 - 代码块背景 */
+        --color-code-block-text: #f9fafb; /* gray-50 - 代码块文本 */
+
+        /* 链接颜色 */
+        --color-link: #3b82f6; /* primary-500 - 链接 */
+        --color-link-hover: #2563eb; /* primary-600 - 链接悬停 */
+    }
+
     * {
         margin: 0;
         padding: 0;
@@ -31,3 +60,389 @@
         -moz-osx-font-smoothing: grayscale;
     }
 }
+
+/* Prose 样式 - 用于 Markdown 内容 */
+@layer components {
+    .prose {
+        color: var(--color-text-secondary);
+        max-width: 65ch;
+    }
+
+    .prose :where(p):not(:where([class~='not-prose'] *)) {
+        margin-top: 1.25em;
+        margin-bottom: 1.25em;
+    }
+
+    .prose :where([class~='lead']):not(:where([class~='not-prose'] *)) {
+        color: var(--color-text-secondary);
+        font-size: 1.25em;
+        line-height: 1.6;
+        margin-top: 1.2em;
+        margin-bottom: 1.2em;
+    }
+
+    .prose :where(a):not(:where([class~='not-prose'] *)) {
+        color: var(--color-link);
+        text-decoration: underline;
+        font-weight: 500;
+    }
+
+    .prose :where(a):hover:not(:where([class~='not-prose'] *)) {
+        color: var(--color-link-hover);
+    }
+
+    .prose :where(strong):not(:where([class~='not-prose'] *)) {
+        color: var(--color-text-primary);
+        font-weight: 600;
+    }
+
+    .prose :where(ol):not(:where([class~='not-prose'] *)) {
+        list-style-type: decimal;
+        margin-top: 1.25em;
+        margin-bottom: 1.25em;
+        padding-left: 1.625em;
+    }
+
+    .prose :where(ul):not(:where([class~='not-prose'] *)) {
+        list-style-type: disc;
+        margin-top: 1.25em;
+        margin-bottom: 1.25em;
+        padding-left: 1.625em;
+    }
+
+    .prose :where(li):not(:where([class~='not-prose'] *)) {
+        margin-top: 0.5em;
+        margin-bottom: 0.5em;
+    }
+
+    .prose :where(ol > li):not(:where([class~='not-prose'] *)) {
+        padding-left: 0.375em;
+    }
+
+    .prose :where(ul > li):not(:where([class~='not-prose'] *)) {
+        padding-left: 0.375em;
+    }
+
+    .prose :where(.prose > ul > li p):not(:where([class~='not-prose'] *)) {
+        margin-top: 0.75em;
+        margin-bottom: 0.75em;
+    }
+
+    .prose :where(.prose > ol > li > *:first-child):not(:where([class~='not-prose'] *)) {
+        margin-top: 1.25em;
+    }
+
+    .prose :where(.prose > ol > li > *:last-child):not(:where([class~='not-prose'] *)) {
+        margin-bottom: 1.25em;
+    }
+
+    .prose :where(.prose > ul > li > *:first-child):not(:where([class~='not-prose'] *)) {
+        margin-top: 1.25em;
+    }
+
+    .prose :where(.prose > ul > li > *:last-child):not(:where([class~='not-prose'] *)) {
+        margin-bottom: 1.25em;
+    }
+
+    .prose :where(hr):not(:where([class~='not-prose'] *)) {
+        border-color: var(--color-border-primary);
+        border-top-width: 1px;
+        margin-top: 3em;
+        margin-bottom: 3em;
+    }
+
+    .prose :where(blockquote):not(:where([class~='not-prose'] *)) {
+        font-weight: 500;
+        font-style: italic;
+        color: var(--color-text-primary);
+        border-left-width: 0.25rem;
+        border-left-color: var(--color-border-primary);
+        quotes: '\201C' '\201D' '\2018' '\2019';
+        margin-top: 1.6em;
+        margin-bottom: 1.6em;
+        padding-left: 1em;
+    }
+
+    .prose :where(h1):not(:where([class~='not-prose'] *)) {
+        color: var(--color-text-primary);
+        font-weight: 800;
+        font-size: 2.25em;
+        margin-top: 0;
+        margin-bottom: 0.8888889em;
+        line-height: 1.1111111;
+    }
+
+    .prose :where(h2):not(:where([class~='not-prose'] *)) {
+        color: var(--color-text-primary);
+        font-weight: 700;
+        font-size: 1.5em;
+        margin-top: 2em;
+        margin-bottom: 1em;
+        line-height: 1.3333333;
+    }
+
+    .prose :where(h3):not(:where([class~='not-prose'] *)) {
+        color: var(--color-text-primary);
+        font-weight: 600;
+        font-size: 1.25em;
+        margin-top: 1.6em;
+        margin-bottom: 0.6em;
+        line-height: 1.6;
+    }
+
+    .prose :where(h4):not(:where([class~='not-prose'] *)) {
+        color: var(--color-text-primary);
+        font-weight: 600;
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+        line-height: 1.5;
+    }
+
+    .prose :where(code):not(:where([class~='not-prose'] *)) {
+        color: var(--color-code-text);
+        font-weight: 600;
+        font-size: 0.875em;
+        background-color: var(--color-code-bg);
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+    }
+
+    .prose :where(code):not(:where([class~='not-prose'] *))::before {
+        content: '';
+    }
+
+    .prose :where(code):not(:where([class~='not-prose'] *))::after {
+        content: '';
+    }
+
+    .prose :where(pre):not(:where([class~='not-prose'] *)) {
+        color: var(--color-code-block-text);
+        background-color: var(--color-code-block-bg);
+        overflow-x: auto;
+        font-weight: 400;
+        font-size: 1em;
+        line-height: 1.7142857;
+        margin-bottom: 1.7142857em;
+        border-radius: 0.375rem;
+        padding: 0;
+    }
+
+    .prose :where(pre code):not(:where([class~='not-prose'] *)) {
+        background-color: transparent;
+        border-width: 0;
+        border-radius: 0;
+        padding: 0;
+        font-weight: inherit;
+        color: inherit;
+        font-size: inherit;
+        font-family: inherit;
+        line-height: inherit;
+    }
+
+    .prose :where(pre code):not(:where([class~='not-prose'] *))::before {
+        content: none;
+    }
+
+    .prose :where(pre code):not(:where([class~='not-prose'] *))::after {
+        content: none;
+    }
+
+    .prose :where(table):not(:where([class~='not-prose'] *)) {
+        width: 100%;
+        table-layout: auto;
+        text-align: left;
+        margin-top: 2em;
+        margin-bottom: 2em;
+        font-size: 0.875em;
+        line-height: 1.7142857;
+    }
+
+    .prose :where(thead):not(:where([class~='not-prose'] *)) {
+        border-bottom-width: 1px;
+        border-bottom-color: var(--color-border-secondary);
+    }
+
+    .prose :where(thead th):not(:where([class~='not-prose'] *)) {
+        color: var(--color-text-primary);
+        font-weight: 600;
+        vertical-align: bottom;
+        padding-right: 0.5714286em;
+        padding-bottom: 0.5714286em;
+        padding-left: 0.5714286em;
+    }
+
+    .prose :where(tbody tr):not(:where([class~='not-prose'] *)) {
+        border-bottom-width: 1px;
+        border-bottom-color: var(--color-border-primary);
+    }
+
+    .prose :where(tbody tr:last-child):not(:where([class~='not-prose'] *)) {
+        border-bottom-width: 0;
+    }
+
+    .prose :where(tbody td):not(:where([class~='not-prose'] *)) {
+        vertical-align: baseline;
+        padding: 0.5714286em;
+    }
+
+    .prose :where(figure):not(:where([class~='not-prose'] *)) {
+        margin-top: 2em;
+        margin-bottom: 2em;
+    }
+
+    .prose :where(img):not(:where([class~='not-prose'] *)) {
+        margin-top: 2em;
+        margin-bottom: 2em;
+    }
+
+    .prose :where(h2 code):not(:where([class~='not-prose'] *)) {
+        font-size: 0.875em;
+    }
+
+    .prose :where(h3 code):not(:where([class~='not-prose'] *)) {
+        font-size: 0.9em;
+    }
+
+    .prose-sm {
+        font-size: 0.875rem;
+        line-height: 1.7142857;
+    }
+
+    .prose-sm :where(p):not(:where([class~='not-prose'] *)) {
+        margin-top: 1.1428571em;
+        margin-bottom: 1.1428571em;
+    }
+
+    .prose-sm :where(h2):not(:where([class~='not-prose'] *)) {
+        font-size: 1.2857143em;
+        margin-top: 1.5555556em;
+        margin-bottom: 0.8888889em;
+        line-height: 1.5555556;
+    }
+
+    .prose-sm :where(h3):not(:where([class~='not-prose'] *)) {
+        font-size: 1.1428571em;
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+        line-height: 1.5;
+    }
+
+    /* 全局滚动条样式 */
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(156, 163, 175, 0.4);
+        border-radius: 3px;
+        transition: background 0.2s;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(156, 163, 175, 0.6);
+    }
+
+    /* 细滚动条变体（用于小区域） */
+    .custom-scrollbar-thin::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+    }
+
+    .custom-scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .custom-scrollbar-thin::-webkit-scrollbar-thumb {
+        background: rgba(156, 163, 175, 0.4);
+        border-radius: 2px;
+    }
+
+    .custom-scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background: rgba(156, 163, 175, 0.6);
+    }
+
+    /* 代码块样式 */
+    .markdown-content .code-block-wrapper {
+        position: relative;
+        border-radius: 0.5rem;
+        overflow: hidden;
+        background-color: #1f2937;
+    }
+
+    .markdown-content .code-block-header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 1rem;
+        background-color: #374151;
+        border-bottom: 1px solid #4b5563;
+        z-index: 10;
+    }
+
+    .markdown-content .code-block-lang {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .markdown-content .code-copy-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.25rem 0.625rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: #d1d5db;
+        background-color: #4b5563;
+        border: none;
+        border-radius: 0.375rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .markdown-content .code-copy-btn:hover {
+        background-color: #6b7280;
+        color: #ffffff;
+    }
+
+    .markdown-content .code-copy-btn:active {
+        transform: scale(0.95);
+    }
+
+    .markdown-content .copy-icon {
+        flex-shrink: 0;
+    }
+
+    .markdown-content .copy-text {
+        white-space: nowrap;
+    }
+
+    .markdown-content .code-block-wrapper pre {
+        margin: 0 !important;
+        padding: 1rem !important;
+        background-color: #1f2937 !important;
+        overflow-x: auto;
+    }
+
+    .markdown-content .code-block-wrapper pre code {
+        font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace !important;
+        font-size: 0.875rem;
+        line-height: 1.7;
+        background-color: transparent !important;
+        color: #f9fafb;
+    }
+}
+
+/* Highlight.js 主题样式 */
+@import 'highlight.js/styles/github-dark.css';

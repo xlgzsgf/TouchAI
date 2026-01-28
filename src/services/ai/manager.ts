@@ -1,88 +1,148 @@
 // Copyright (c) 2025. 千诚. Licensed under GPL v3
 
 import {
-    findEnabledModelsByPriority,
     findMessagesBySessionId,
+    findModelsWithProvider,
     updateModelLastUsed,
 } from '@/database/queries';
 import type { Model } from '@/database/schema';
 
 import { ClaudeProvider } from './providers/claude';
-import { OllamaProvider } from './providers/ollama';
 import { OpenAiProvider } from './providers/openai';
 import type { AiMessage, AiProvider, AiResponse, AiStreamChunk } from './types';
+
+/**
+ * 模型与服务商信息的联合类型
+ */
+export type ModelWithProvider = Model & {
+    provider_name: string;
+    provider_type: string;
+    api_endpoint: string;
+    api_key: string | null;
+    provider_enabled: number;
+    provider_logo: string;
+};
 
 /**
  * AI 服务管理器
  * 管理 AI 提供商并将请求路由到适当的提供商
  */
 export class AiServiceManager {
+    // 按服务商 ID 缓存提供商实例
     private providers = new Map<number, AiProvider>();
 
     /**
-     * 获取优先级最高的启用模型
+     * 获取全局默认模型（包含服务商信息）
      */
-    async getActiveModel(): Promise<Model | null> {
-        const models = await findEnabledModelsByPriority();
-        return models[0] || null;
+    async getActiveModel(): Promise<ModelWithProvider | null> {
+        const models = await findModelsWithProvider();
+
+        // 查找默认模型且服务商已启用
+        const defaultModel = models.find((m) => m.is_default === 1 && m.provider_enabled === 1);
+
+        if (!defaultModel) {
+            console.error('[AiServiceManager] No default model found or provider disabled');
+            return null;
+        }
+
+        return defaultModel as ModelWithProvider;
     }
 
     /**
-     * 获取或创建模型的提供商
+     * 获取或创建服务商的提供商实例
      */
-    private getProvider(model: Model): AiProvider {
-        if (this.providers.has(model.id)) {
-            return this.providers.get(model.id)!;
-        }
-
-        // 获取 endpoint 并自动拼接 /v1（如果需要）
-        const baseEndpoint = model.api_endpoint || this.getDefaultBaseEndpoint(model.type);
-        const apiEndpoint = this.normalizeEndpoint(baseEndpoint, model.type);
-
+    private getProvider(
+        providerId: number,
+        providerType: string,
+        apiEndpoint: string,
+        apiKey?: string | null
+    ): AiProvider {
+        // 规范化端点
+        const normalizedEndpoint = this.normalizeEndpoint(apiEndpoint, providerType);
+        console.log(normalizedEndpoint);
         const config = {
-            apiEndpoint,
-            apiKey: model.api_key || undefined,
-            maxTokens: model.max_tokens || undefined,
-            temperature: model.temperature || undefined,
+            apiEndpoint: normalizedEndpoint,
+            apiKey: apiKey || undefined,
         };
 
         let provider: AiProvider;
-        switch (model.type) {
+        switch (providerType) {
             case 'openai':
                 provider = new OpenAiProvider(config);
                 break;
             case 'claude':
                 provider = new ClaudeProvider(config);
                 break;
-            case 'ollama':
-                provider = new OllamaProvider(config);
-                break;
             default:
-                throw new Error(`Unknown model type: ${model.type}`);
+                throw new Error(`Unknown provider type: ${providerType}`);
         }
 
-        this.providers.set(model.id, provider);
+        this.providers.set(providerId, provider);
         return provider;
+    }
+
+    /**
+     * 创建服务商的提供商实例（公共方法）
+     */
+    createProviderInstance(
+        providerType: string,
+        apiEndpoint: string,
+        apiKey?: string | null
+    ): AiProvider {
+        // 规范化端点
+        const normalizedEndpoint = this.normalizeEndpoint(apiEndpoint, providerType);
+        const config = {
+            apiEndpoint: normalizedEndpoint,
+            apiKey: apiKey || undefined,
+        };
+
+        switch (providerType) {
+            case 'openai':
+                return new OpenAiProvider(config);
+            case 'claude':
+                return new ClaudeProvider(config);
+            default:
+                throw new Error(`Unknown provider type: ${providerType}`);
+        }
+    }
+
+    /**
+     * 清除指定服务商的缓存实例
+     */
+    clearProviderCache(providerId?: number): void {
+        if (providerId !== undefined) {
+            this.providers.delete(providerId);
+        } else {
+            this.providers.clear();
+        }
     }
 
     /**
      * 发送 AI 请求
      */
     async request(prompt: string, sessionId?: number): Promise<AiResponse> {
-        const model = await this.getActiveModel();
-        if (!model) {
+        const activeModel = await this.getActiveModel();
+        if (!activeModel) {
             throw new Error('No active AI model configured');
         }
 
-        const provider = this.getProvider(model);
+        const provider = this.getProvider(
+            activeModel.provider_id,
+            activeModel.provider_type,
+            activeModel.api_endpoint,
+            activeModel.api_key
+        );
+
         const messages = await this.buildMessages(prompt, sessionId);
 
         const response = await provider.request({
-            model: model.model_id,
+            model: activeModel.model_id,
             messages,
+            maxTokens: activeModel.max_tokens || undefined,
+            temperature: activeModel.temperature || undefined,
         });
 
-        await updateModelLastUsed(model.id);
+        await updateModelLastUsed(activeModel.id);
         return response;
     }
 
@@ -92,40 +152,32 @@ export class AiServiceManager {
     async *stream(
         prompt: string,
         sessionId?: number
-    ): AsyncGenerator<{ chunk: AiStreamChunk; model: Model }, void, unknown> {
-        console.log('[AiServiceManager] Starting stream request');
-        console.log('[AiServiceManager] Session ID:', sessionId || 'none');
-
-        const model = await this.getActiveModel();
-        if (!model) {
+    ): AsyncGenerator<{ chunk: AiStreamChunk; model: ModelWithProvider }, void, unknown> {
+        const activeModel = await this.getActiveModel();
+        if (!activeModel) {
             console.error('[AiServiceManager] No active model found');
             throw new Error('No active AI model configured');
         }
-        console.log('[AiServiceManager] Using model:', model.name, `(${model.type})`);
 
-        const provider = this.getProvider(model);
-        console.log('[AiServiceManager] Provider created:', provider.name);
+        const provider = this.getProvider(
+            activeModel.provider_id,
+            activeModel.provider_type,
+            activeModel.api_endpoint,
+            activeModel.api_key
+        );
 
         const messages = await this.buildMessages(prompt, sessionId);
-        console.log('[AiServiceManager] Built message history with', messages.length, 'messages');
 
-        console.log('[AiServiceManager] Starting provider stream...');
-        let chunkIndex = 0;
         for await (const chunk of provider.stream({
-            model: model.model_id,
+            model: activeModel.model_id,
             messages,
+            maxTokens: activeModel.max_tokens || undefined,
+            temperature: activeModel.temperature || undefined,
         })) {
-            chunkIndex++;
-            if (chunk.content) {
-                console.log(`[AiServiceManager] Yielding chunk #${chunkIndex}`);
-            }
-            yield { chunk, model };
+            yield { chunk, model: activeModel };
         }
 
-        console.log('[AiServiceManager] Stream completed, total chunks:', chunkIndex);
-        console.log('[AiServiceManager] Updating model last used time');
-        await updateModelLastUsed(model.id);
-        console.log('[AiServiceManager] Stream request finished');
+        await updateModelLastUsed(activeModel.id);
     }
 
     /**
@@ -150,22 +202,6 @@ export class AiServiceManager {
     }
 
     /**
-     * 获取默认基础端点（不含 /v1）
-     */
-    private getDefaultBaseEndpoint(type: string): string {
-        switch (type) {
-            case 'openai':
-                return 'https://api.openai.com';
-            case 'claude':
-                return 'https://api.anthropic.com';
-            case 'ollama':
-                return 'http://localhost:11434';
-            default:
-                return '';
-        }
-    }
-
-    /**
      * 规范化端点，自动拼接 /v1（如果需要）
      */
     private normalizeEndpoint(endpoint: string, type: string): string {
@@ -180,11 +216,9 @@ export class AiServiceManager {
         // 根据类型决定是否需要拼接 /v1
         switch (type) {
             case 'openai':
-            case 'claude':
                 return `${endpoint}/v1`;
-            case 'ollama':
-                // Ollama 不需要 /v1
-                return endpoint;
+            case 'claude':
+                return `${endpoint}`;
             default:
                 return endpoint;
         }
@@ -194,14 +228,20 @@ export class AiServiceManager {
      * 测试模型连接
      */
     async testModel(modelId: number): Promise<boolean> {
-        const models = await findEnabledModelsByPriority();
+        const models = await findModelsWithProvider();
         const model = models.find((m) => m.id === modelId);
 
         if (!model) {
             throw new Error(`Model with id ${modelId} not found`);
         }
 
-        const provider = this.getProvider(model);
+        const provider = this.getProvider(
+            model.provider_id,
+            model.provider_type,
+            model.api_endpoint,
+            model.api_key
+        );
+
         return provider.testConnection();
     }
 }

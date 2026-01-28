@@ -69,22 +69,16 @@ class TauriSqlConnection implements DatabaseConnection {
         parameters: readonly unknown[];
     }): Promise<QueryResult<O>> {
         const { sql, parameters } = compiledQuery;
-        console.log('Executing query:', sql);
         try {
-            // 判断是否是 SELECT 查询
             const isSelect = sql.trim().toUpperCase().startsWith('SELECT');
 
             if (isSelect) {
-                // SELECT 查询返回结果集
                 const rows = await this.db.select<O[]>(sql, parameters as SqlValue[]);
-                console.log('SELECT execution result:', rows);
                 return {
                     rows: rows || [],
                 };
             } else {
-                // INSERT/UPDATE/DELETE 查询
                 const result = await this.db.execute(sql, parameters as SqlValue[]);
-                console.log('Query execution result:', result);
                 return {
                     rows: [],
                     numAffectedRows: BigInt(result.rowsAffected),
