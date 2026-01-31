@@ -1,7 +1,9 @@
 // Copyright (c) 2025. 千诚. Licensed under GPL v3
 
+mod autostart;
 mod settings;
 mod shortcut;
+mod tray;
 mod utils;
 mod window;
 
@@ -16,19 +18,28 @@ pub fn run() {
     }
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             window::resize_search_window,
-            window::set_allow_blur_hide,
+            window::hide_search_window,
             settings::open_settings_window,
             shortcut::register_global_shortcut,
+            autostart::enable_autostart,
+            autostart::disable_autostart,
+            autostart::is_autostart_enabled,
+            tray::close_tray_menu,
+            tray::exit_app,
         ])
         .setup(|app| {
-            // 设置窗口事件
-            if let Err(e) = window::setup_window_events(app) {
-                eprintln!("Failed to setup window events: {}", e);
-                return Err(e.into());
+            // 创建系统托盘
+            if let Err(e) = tray::create_tray(app.handle()) {
+                eprintln!("Failed to create tray: {}", e);
             }
 
             // 设置快捷键处理

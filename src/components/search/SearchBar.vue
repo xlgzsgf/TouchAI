@@ -5,9 +5,11 @@
 <template>
     <div ref="containerRef" class="relative mx-auto h-[56px] w-full select-none">
         <div
-            class="bg-background-primary relative flex h-full items-center gap-3 rounded-lg border border-gray-300 p-3 backdrop-blur-sm backdrop-blur-xl transition-all duration-250 ease-in-out"
+            :class="[
+                'search-bar-container bg-background-primary relative flex h-full items-center gap-3 rounded-lg p-3 backdrop-blur-sm backdrop-blur-xl transition-all duration-250 ease-in-out',
+                isLoading ? 'loading' : '',
+            ]"
         >
-            <!-- Model Logo (clickable) -->
             <div
                 class="flex cursor-pointer items-center justify-center"
                 data-tauri-drag-region="false"
@@ -30,12 +32,11 @@
                 />
             </div>
 
-            <!-- Model Badge (if selected) -->
             <div
                 v-if="selectedModelId"
                 class="inline-flex items-center gap-1.5 rounded-md bg-blue-100 px-2 py-1 text-sm font-medium text-blue-700"
             >
-                <span>{{ selectedModelName }}</span>
+                <span>@{{ selectedModelName }}</span>
                 <button
                     class="rounded p-0.5 transition-colors hover:bg-blue-200"
                     @click.stop="clearSelectedModel"
@@ -44,24 +45,20 @@
                 </button>
             </div>
 
-            <!-- Input Field -->
             <input
                 ref="searchInput"
                 v-model="searchQuery"
                 type="text"
                 autofocus
                 :readonly="disabled"
-                :placeholder="placeholder"
+                :placeholder="currentPlaceholder"
                 :class="[
                     'flex-1 cursor-default border-0 bg-transparent font-sans text-lg caret-gray-500 outline-none placeholder:text-gray-400 placeholder:select-none',
                     disabled ? 'text-gray-400' : 'text-gray-900',
                 ]"
                 @input="onInput"
-                @keydown="onKeyDown"
-                @keydown.enter.prevent="onEnter"
             />
 
-            <!-- Clear Button -->
             <div
                 v-if="searchQuery"
                 class="ml-2 flex cursor-pointer items-center text-gray-400 transition-colors duration-200 hover:text-gray-600"
@@ -70,19 +67,8 @@
             >
                 <SvgIcon name="clear" class="h-5 w-5" />
             </div>
-
-            <!-- Settings Button -->
-            <div
-                class="ml-2 flex cursor-pointer items-center text-gray-400 transition-colors duration-200 hover:text-gray-600"
-                data-tauri-drag-region="false"
-                title="设置"
-                @click.stop="openSettings"
-            >
-                <SvgIcon name="settings" class="h-5 w-5" />
-            </div>
         </div>
 
-        <!-- Model Dropdown (moved outside inner div) -->
         <ModelDropdown
             ref="modelDropdownRef"
             :is-open="isModelDropdownOpen"
@@ -103,16 +89,18 @@
     import { findModelsWithProvider } from '@database/queries';
     import type { ModelWithProvider } from '@services/ai/manager';
     import { aiService } from '@services/ai/manager';
-    import { invoke } from '@tauri-apps/api/core';
+    import { getCurrentWindow } from '@tauri-apps/api/window';
     import { getModelLogoByModelName } from '@utils/modelLogoMatcher';
-    import { onMounted, onUnmounted, ref } from 'vue';
+    import { computed, onMounted, onUnmounted, ref } from 'vue';
 
     interface Props {
         disabled?: boolean;
+        isLoading?: boolean;
     }
 
-    const props = withDefaults(defineProps<Props>(), {
+    withDefaults(defineProps<Props>(), {
         disabled: false,
+        isLoading: false,
     });
 
     const placeholder = '写下你的需求...';
@@ -122,13 +110,23 @@
     const modelDropdownRef = ref<InstanceType<typeof ModelDropdown> | null>(null);
     const containerRef = ref<HTMLElement | null>(null);
 
+    // 保存打开下拉框前的状态
+    const savedSearchQuery = ref('');
+    const savedCursorPosition = ref(0);
+    const isSearchingModel = ref(false);
+
+    // 动态 placeholder
+    const currentPlaceholder = computed(() => {
+        return isSearchingModel.value ? '请输入模型名称或ID' : placeholder;
+    });
+
     // Model selection state
     const selectedModelId = ref<string | null>(null);
     const selectedModelName = ref<string | null>(null);
+    const selectedProviderId = ref<number | null>(null); // 添加 provider_id
     const activeModel = ref<ModelWithProvider | null>(null);
     const isModelDropdownOpen = ref(false);
     const dropdownSearchQuery = ref('');
-    const savedSearchQuery = ref(''); // 保存打开下拉框前的查询内容
 
     const emit = defineEmits<{
         search: [query: string];
@@ -137,16 +135,26 @@
         dropdownStateChange: [isOpen: boolean];
     }>();
 
-    // Load active model on mount
-    onMounted(async () => {
+    // 加载活动模型
+    const loadActiveModel = async () => {
         try {
             activeModel.value = await aiService.getActiveModel();
         } catch (error) {
             console.error('[SearchBar] Failed to load active model:', error);
         }
+    };
+
+    // Load active model on mount
+    onMounted(async () => {
+        await loadActiveModel();
 
         // 添加全局点击事件监听，点击外部关闭下拉框
         document.addEventListener('click', handleClickOutside);
+
+        // 监听窗口焦点事件，每次获得焦点时重新加载活动模型
+        getCurrentWindow().listen('tauri://focus', async () => {
+            await loadActiveModel();
+        });
     });
 
     onUnmounted(() => {
@@ -172,56 +180,70 @@
 
     function toggleModelDropdown() {
         if (!isModelDropdownOpen.value) {
-            // 打开下拉框：保存当前查询，清空输入框用于搜索
+            // 打开下拉框：保存当前状态，清空输入框
             savedSearchQuery.value = searchQuery.value;
+            savedCursorPosition.value = searchInput.value?.selectionStart || 0;
             searchQuery.value = '';
+            isSearchingModel.value = true;
             dropdownSearchQuery.value = '';
-            // 禁用失焦隐藏窗口
-            invoke('set_allow_blur_hide', { allow: false }).catch(console.error);
+            isModelDropdownOpen.value = true;
+            // 确保输入框保持焦点
+            searchInput.value?.focus();
         } else {
-            // 关闭下拉框：恢复之前的查询
-            searchQuery.value = savedSearchQuery.value;
-            // 恢复失焦隐藏窗口
-            invoke('set_allow_blur_hide', { allow: true }).catch(console.error);
+            // 关闭下拉框：恢复原始状态
+            restoreSearchState();
         }
-        isModelDropdownOpen.value = !isModelDropdownOpen.value;
         emit('dropdownStateChange', isModelDropdownOpen.value);
     }
 
     function closeModelDropdown() {
-        // 恢复之前的查询
-        searchQuery.value = savedSearchQuery.value;
         isModelDropdownOpen.value = false;
         dropdownSearchQuery.value = '';
-        // 恢复失焦隐藏窗口
-        invoke('set_allow_blur_hide', { allow: true }).catch(console.error);
+        restoreSearchState();
         emit('dropdownStateChange', false);
     }
 
-    async function handleModelSelect(modelId: string) {
+    // 恢复搜索框状态
+    function restoreSearchState() {
+        if (isSearchingModel.value) {
+            searchQuery.value = savedSearchQuery.value;
+            isSearchingModel.value = false;
+            // 恢复光标位置
+            setTimeout(() => {
+                if (searchInput.value) {
+                    searchInput.value.setSelectionRange(
+                        savedCursorPosition.value,
+                        savedCursorPosition.value
+                    );
+                    searchInput.value.focus();
+                }
+            }, 0);
+        }
+    }
+
+    async function handleModelSelect(modelDbId: number) {
         try {
             const models = await findModelsWithProvider();
-            const model = models.find((m) => m.model_id === modelId);
+            const model = models.find((m) => m.id === modelDbId);
             if (model) {
-                selectedModelId.value = modelId;
+                selectedModelId.value = model.model_id;
                 selectedModelName.value = model.name;
+                selectedProviderId.value = model.provider_id;
             }
         } catch (error) {
             console.error('[SearchBar] Failed to select model:', error);
         }
-        // 恢复之前的查询
-        searchQuery.value = savedSearchQuery.value;
+        // 关闭下拉框并恢复输入框状态
         isModelDropdownOpen.value = false;
         dropdownSearchQuery.value = '';
-        // 恢复失焦隐藏窗口
-        await invoke('set_allow_blur_hide', { allow: true }).catch(console.error);
+        restoreSearchState();
         emit('dropdownStateChange', false);
-        searchInput.value?.focus();
     }
 
     function clearSelectedModel() {
         selectedModelId.value = null;
         selectedModelName.value = null;
+        selectedProviderId.value = null;
     }
 
     function onInput() {
@@ -232,48 +254,21 @@
         emit('search', searchQuery.value);
     }
 
-    function onKeyDown(event: KeyboardEvent) {
-        // Check for @ key to open dropdown
-        if (event.key === '@' && !isModelDropdownOpen.value) {
-            event.preventDefault();
-            // 保存当前查询，清空输入框用于搜索
-            savedSearchQuery.value = searchQuery.value;
-            searchQuery.value = '';
-            isModelDropdownOpen.value = true;
-            dropdownSearchQuery.value = '';
-            // 禁用失焦隐藏窗口
-            invoke('set_allow_blur_hide', { allow: false }).catch(console.error);
-            emit('dropdownStateChange', true);
-            return;
-        }
-
-        // If dropdown is open, let it handle navigation keys
-        if (isModelDropdownOpen.value) {
-            if (['ArrowUp', 'ArrowDown', 'Enter'].includes(event.key)) {
-                event.preventDefault();
-                modelDropdownRef.value?.handleKeyDown(event);
-                return;
-            }
-
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                closeModelDropdown();
-                return;
-            }
-
-            // For other keys, let them type normally in the input
-            // The onInput handler will update dropdownSearchQuery
-        }
+    // 打开模型下拉框
+    function openModelDropdown() {
+        savedSearchQuery.value = searchQuery.value;
+        savedCursorPosition.value = searchInput.value?.selectionStart || 0;
+        searchQuery.value = '';
+        isSearchingModel.value = true;
+        dropdownSearchQuery.value = '';
+        isModelDropdownOpen.value = true;
+        emit('dropdownStateChange', true);
+        searchInput.value?.focus();
     }
 
-    function onEnter() {
-        // 如果禁用状态或输入为空，不处理
-        if (props.disabled || !searchQuery.value.trim()) {
-            return;
-        }
-
-        // 普通查询
-        emit('submit', searchQuery.value);
+    // 处理下拉框的键盘事件
+    function handleDropdownKeyDown(event: KeyboardEvent) {
+        modelDropdownRef.value?.handleKeyDown(event);
     }
 
     function clearSearch() {
@@ -289,20 +284,59 @@
         searchInput?.value?.focus();
     }
 
-    async function openSettings() {
-        try {
-            await invoke('open_settings_window');
-        } catch (error) {
-            console.error('Failed to open settings window:', error);
-        }
-    }
-
     defineExpose({
         selectedModelId,
+        selectedProviderId,
+        isModelDropdownOpen,
         clearSelectedModel,
+        closeModelDropdown,
+        openModelDropdown,
+        handleDropdownKeyDown,
         focus,
         clearInput,
     });
 </script>
 
-<style scoped></style>
+<style scoped>
+    .search-bar-container {
+        border: 1px solid #d1d5db;
+    }
+
+    .search-bar-container.loading {
+        border: 2px solid transparent;
+        background-image:
+            linear-gradient(rgba(251, 251, 246, 0.98), rgba(251, 251, 246, 0.98)),
+            linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #8b5cf6, #3b82f6);
+        background-origin: border-box;
+        background-clip: padding-box, border-box;
+        animation: border-flow 1.5s linear infinite;
+    }
+
+    @keyframes border-flow {
+        0% {
+            background-image:
+                linear-gradient(rgba(251, 251, 246, 0.98), rgba(251, 251, 246, 0.98)),
+                linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #8b5cf6, #3b82f6);
+        }
+        25% {
+            background-image:
+                linear-gradient(rgba(251, 251, 246, 0.98), rgba(251, 251, 246, 0.98)),
+                linear-gradient(90deg, #8b5cf6, #ec4899, #8b5cf6, #3b82f6, #8b5cf6);
+        }
+        50% {
+            background-image:
+                linear-gradient(rgba(251, 251, 246, 0.98), rgba(251, 251, 246, 0.98)),
+                linear-gradient(90deg, #ec4899, #8b5cf6, #3b82f6, #8b5cf6, #ec4899);
+        }
+        75% {
+            background-image:
+                linear-gradient(rgba(251, 251, 246, 0.98), rgba(251, 251, 246, 0.98)),
+                linear-gradient(90deg, #8b5cf6, #3b82f6, #8b5cf6, #ec4899, #8b5cf6);
+        }
+        100% {
+            background-image:
+                linear-gradient(rgba(251, 251, 246, 0.98), rgba(251, 251, 246, 0.98)),
+                linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #8b5cf6, #3b82f6);
+        }
+    }
+</style>

@@ -8,18 +8,12 @@
         globalShortcut: string;
         startOnBoot: boolean;
         startMinimized: boolean;
-        fontSize: 'small' | 'medium' | 'large';
-        animationSpeed: 'fast' | 'normal' | 'slow';
-        windowOpacity: number;
     }
 
     const settings = ref<GeneralSettingsData>({
         globalShortcut: 'Alt+Space',
         startOnBoot: false,
-        startMinimized: false,
-        fontSize: 'medium',
-        animationSpeed: 'normal',
-        windowOpacity: 95,
+        startMinimized: true,
     });
 
     const shortcutInput = ref<HTMLInputElement | null>(null);
@@ -181,24 +175,6 @@
             if (startMinimized) {
                 settings.value.startMinimized = startMinimized === 'true';
             }
-
-            const fontSize = await getSettingValue('font_size');
-            if (fontSize && ['small', 'medium', 'large'].includes(fontSize)) {
-                settings.value.fontSize = fontSize as 'small' | 'medium' | 'large';
-            }
-
-            const animationSpeed = await getSettingValue('animation_speed');
-            if (animationSpeed && ['fast', 'normal', 'slow'].includes(animationSpeed)) {
-                settings.value.animationSpeed = animationSpeed as 'fast' | 'normal' | 'slow';
-            }
-
-            const windowOpacity = await getSettingValue('window_opacity');
-            if (windowOpacity) {
-                const opacity = parseInt(windowOpacity, 10);
-                if (!isNaN(opacity) && opacity >= 60 && opacity <= 100) {
-                    settings.value.windowOpacity = opacity;
-                }
-            }
         } catch (error) {
             console.error('Failed to load settings:', error);
             alertMessage.value?.error('加载设置失败', 3000);
@@ -245,21 +221,24 @@
     // 保存其他设置
     const saveOtherSettings = async () => {
         try {
+            // 保存开机自启动设置
             await setSetting('start_on_boot', settings.value.startOnBoot.toString(), '开机自启动');
+
+            // 同步到系统
+            if (settings.value.startOnBoot) {
+                await invoke('enable_autostart');
+            } else {
+                await invoke('disable_autostart');
+            }
+
             await setSetting(
                 'start_minimized',
                 settings.value.startMinimized.toString(),
                 '启动时最小化'
             );
-            await setSetting('font_size', settings.value.fontSize, '响应字体大小');
-            await setSetting('animation_speed', settings.value.animationSpeed, '动画速度');
-            await setSetting(
-                'window_opacity',
-                settings.value.windowOpacity.toString(),
-                '窗口透明度'
-            );
         } catch (error) {
             console.error('Failed to save settings:', error);
+            alertMessage.value?.error('保存设置失败', 3000);
         }
     };
 
@@ -272,24 +251,23 @@
         await loadSettings();
         // 应用启动时注册快捷键
         await registerShortcut(settings.value.globalShortcut);
+
+        // 同步开机自启动状态
+        try {
+            const isEnabled = await invoke<boolean>('is_autostart_enabled');
+            if (isEnabled !== settings.value.startOnBoot) {
+                settings.value.startOnBoot = isEnabled;
+                await setSetting('start_on_boot', isEnabled.toString(), '开机自启动');
+            }
+        } catch (error) {
+            console.error('Failed to check autostart status:', error);
+        }
     });
 
     // 组件卸载时清理事件监听
     onUnmounted(() => {
         window.removeEventListener('keydown', captureShortcut);
     });
-
-    const fontSizeOptions = [
-        { value: 'small', label: '小' },
-        { value: 'medium', label: '中' },
-        { value: 'large', label: '大' },
-    ];
-
-    const animationSpeedOptions = [
-        { value: 'fast', label: '快' },
-        { value: 'normal', label: '正常' },
-        { value: 'slow', label: '慢' },
-    ];
 </script>
 
 <template>
@@ -435,72 +413,6 @@
                                 ]"
                             />
                         </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Interface Settings -->
-            <div class="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
-                <h2 class="font-serif text-lg font-semibold text-gray-900">界面设置</h2>
-                <div class="space-y-4">
-                    <!-- Font Size -->
-                    <div>
-                        <label class="mb-2 block font-serif text-sm font-medium text-gray-900">
-                            响应字体大小
-                        </label>
-                        <select
-                            v-model="settings.fontSize"
-                            class="focus:ring-primary-500 w-full rounded-lg border border-gray-200 bg-white px-4 py-2 font-serif focus:ring-2 focus:outline-none"
-                            @change="handleSettingChange"
-                        >
-                            <option
-                                v-for="option in fontSizeOptions"
-                                :key="option.value"
-                                :value="option.value"
-                            >
-                                {{ option.label }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <!-- Animation Speed -->
-                    <div>
-                        <label class="mb-2 block font-serif text-sm font-medium text-gray-900">
-                            动画速度
-                        </label>
-                        <select
-                            v-model="settings.animationSpeed"
-                            class="focus:ring-primary-500 w-full rounded-lg border border-gray-200 bg-white px-4 py-2 font-serif focus:ring-2 focus:outline-none"
-                            @change="handleSettingChange"
-                        >
-                            <option
-                                v-for="option in animationSpeedOptions"
-                                :key="option.value"
-                                :value="option.value"
-                            >
-                                {{ option.label }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <!-- Window Opacity -->
-                    <div>
-                        <label class="mb-2 block font-serif text-sm font-medium text-gray-900">
-                            窗口透明度: {{ settings.windowOpacity }}%
-                        </label>
-                        <input
-                            v-model.number="settings.windowOpacity"
-                            type="range"
-                            min="60"
-                            max="100"
-                            step="5"
-                            class="accent-primary-600 h-2 w-full cursor-pointer appearance-none rounded-lg bg-gray-200"
-                            @change="handleSettingChange"
-                        />
-                        <div class="mt-1 flex justify-between font-serif text-xs text-gray-500">
-                            <span>60%</span>
-                            <span>100%</span>
-                        </div>
                     </div>
                 </div>
             </div>

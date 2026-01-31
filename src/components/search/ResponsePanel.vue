@@ -11,16 +11,6 @@
             :style="{ maxHeight: `${maxHeight}px` }"
             @scroll="handleScroll"
         >
-            <div
-                v-if="isLoading && !content && !reasoning"
-                class="flex w-full items-center gap-2 p-4 text-gray-500"
-            >
-                <div
-                    class="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"
-                ></div>
-                <span>Thinking...</span>
-            </div>
-
             <div v-if="reasoning || isThinking" class="reasoning-section mb-4 w-full">
                 <button
                     class="flex w-full items-center gap-2 px-1 py-2 text-left text-sm font-normal text-gray-700 transition-colors hover:text-gray-900"

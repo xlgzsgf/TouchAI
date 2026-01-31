@@ -197,3 +197,25 @@ export const findModelByModelId = (modelId: string) =>
         ])
         .where('models.model_id', '=', modelId)
         .executeTakeFirst();
+
+/**
+ * 根据 provider_id 和 model_id 查找模型（包含服务商信息）
+ * 用于精确定位特定提供商的特定模型
+ */
+export const findModelByProviderAndModelId = (providerId: number, modelId: string) =>
+    db
+        .getKysely()
+        .selectFrom('models')
+        .innerJoin('providers', 'providers.id', 'models.provider_id')
+        .selectAll('models')
+        .select([
+            'providers.name as provider_name',
+            'providers.type as provider_type',
+            'providers.api_endpoint',
+            'providers.api_key',
+            'providers.enabled as provider_enabled',
+            'providers.logo as provider_logo',
+        ])
+        .where('models.provider_id', '=', providerId)
+        .where('models.model_id', '=', modelId)
+        .executeTakeFirst();

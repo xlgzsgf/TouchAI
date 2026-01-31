@@ -42,7 +42,7 @@
 <template>
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
         <div class="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
-            <h2 class="mb-5 text-base font-semibold text-gray-900">添加模型</h2>
+            <h2 class="mb-5 font-serif text-base font-bold text-gray-900">添加模型</h2>
 
             <div class="space-y-4">
                 <div>

@@ -5,14 +5,17 @@
     import SearchBar from '@components/search/SearchBar.vue';
     import { useAiRequest } from '@composables/useAiRequest';
     import { useWindowResize } from '@composables/useWindowResize';
+    import { invoke } from '@tauri-apps/api/core';
     import { getCurrentWindow } from '@tauri-apps/api/window';
-    import { nextTick, onMounted, ref } from 'vue';
+    import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 
     const searchQuery = ref('');
     const searchBar = ref<InstanceType<typeof SearchBar>>();
     const responseDisplay = ref<InstanceType<typeof ResponsePanel>>();
     const pageContainer = ref<HTMLElement | null>(null);
     let resizeObserver: ResizeObserver | null = null;
+    let unlistenFocus: (() => void) | null = null;
+    let unlistenBlur: (() => void) | null = null;
 
     // 双击退格检测（仅用于取消请求）
     const lastBackspacePressTime = ref(0);
@@ -34,11 +37,10 @@
     async function handleSubmit(query: string) {
         reset();
 
-        // Get selected model from SearchBar
         const selectedModelId = searchBar.value?.selectedModelId;
+        const selectedProviderId = searchBar.value?.selectedProviderId;
 
-        // Send request with optional model override
-        await sendRequest(query, selectedModelId || undefined);
+        await sendRequest(query, selectedModelId || undefined, selectedProviderId || undefined);
     }
 
     // 处理清空事件（点击清除按钮）
@@ -78,6 +80,7 @@
     // 键盘事件监听
     async function handleKeyDown(event: KeyboardEvent) {
         const now = Date.now();
+        console.log('[handleKeyDown] Key pressed:', event.key);
 
         // Tab 键切换焦点到响应模块
         if (event.key === 'Tab' && hasResponse.value) {
@@ -91,39 +94,88 @@
             event.preventDefault();
             event.stopPropagation();
 
-            // 如果输入为空且有选择模型，取消选择模型
-            if (!searchQuery.value.trim() && searchBar.value?.selectedModelId) {
+            // 优先级1: 如果下拉框打开，关闭下拉框
+            if (searchBar.value?.isModelDropdownOpen) {
+                searchBar.value?.closeModelDropdown();
+                return;
+            }
+
+            // 优先级2: 如果正在加载，取消请求
+            if (isLoading.value) {
+                cancelRequest();
+                return;
+            }
+
+            // 优先级3: 如果输入为空且有选择模型，取消选择模型
+            const hasSelectedModel = searchBar.value?.selectedModelId;
+            if (!searchQuery.value.trim() && hasSelectedModel) {
                 searchBar.value?.clearSelectedModel();
                 return;
             }
 
-            // 如果没有输入内容并且也没有结果，即空窗口，那么隐藏窗口
+            // 优先级4: 如果没有输入内容并且也没有结果，即空窗口，那么隐藏窗口
             if (!searchQuery.value.trim() && !hasResponse.value) {
                 await getCurrentWindow().hide();
                 return;
             }
 
-            // 如果有内容
-            if (isLoading.value) {
-                // 正在请求中，取消请求但不清空输出内容
-                cancelRequest();
-            } else {
-                // 不在请求中，清空内容
-                clearAll();
-            }
+            // 优先级5: 其他情况，清空内容
+            clearAll();
             return;
         }
 
-        // 双击退格键取消请求
+        // @ 键打开模型下拉框
+        if (event.key === '@' && !searchBar.value?.isModelDropdownOpen) {
+            event.preventDefault();
+            searchBar.value?.openModelDropdown();
+            return;
+        }
+
+        // 如果下拉框打开，处理相关按键
+        if (searchBar.value?.isModelDropdownOpen) {
+            // 箭头键和 Enter 键交给下拉框处理
+            if (['ArrowUp', 'ArrowDown', 'Enter'].includes(event.key)) {
+                event.preventDefault();
+                searchBar.value?.handleDropdownKeyDown(event);
+                return;
+            }
+            // 其他可输入字符，确保焦点在输入框上
+            if (event.key.length === 1 || event.key === 'Backspace') {
+                searchBar.value?.focus();
+            }
+        }
+
+        // Backspace 键处理
         if (event.key === 'Backspace') {
+            // 如果下拉框打开，关闭下拉框
+            if (searchBar.value?.isModelDropdownOpen) {
+                searchBar.value?.closeModelDropdown();
+                return;
+            }
+
+            // 如果输入框为空且有选择的模型，删除模型选择
+            if (!searchQuery.value && searchBar.value?.selectedModelId) {
+                event.preventDefault();
+                searchBar.value?.clearSelectedModel();
+                return;
+            }
+
+            // 双击退格键取消请求
             if (now - lastBackspacePressTime.value < DOUBLE_PRESS_THRESHOLD) {
-                // 如果在加载中，取消请求
                 if (isLoading.value) {
                     cancelRequest();
                 }
-                lastBackspacePressTime.value = 0; // 重置，避免三击触发
+                lastBackspacePressTime.value = 0;
             } else {
                 lastBackspacePressTime.value = now;
+            }
+        }
+
+        // Enter 键提交查询
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            if (!isLoading.value && searchQuery.value.trim()) {
+                await handleSubmit(searchQuery.value);
             }
         }
     }
@@ -148,22 +200,47 @@
         });
     }
 
-    function initFocusListener() {
-        getCurrentWindow().listen('tauri://focus', async () => {
+    async function initFocusListener() {
+        unlistenFocus = await getCurrentWindow().listen('tauri://focus', async () => {
             await nextTick();
             searchBar.value?.focus();
+        });
+
+        unlistenBlur = await getCurrentWindow().listen('tauri://blur', async () => {
+            await invoke('hide_search_window');
         });
     }
 
     onMounted(async () => {
         // 初始化窗口获得焦点监听
-        initFocusListener();
+        await initFocusListener();
 
         // 监听整个页面容器的高度变化
         initPageHeightChangeListener();
 
         // 添加全局键盘事件监听
         window.addEventListener('keydown', handleKeyDown);
+    });
+
+    onUnmounted(() => {
+        // 清理全局键盘事件监听
+        window.removeEventListener('keydown', handleKeyDown);
+
+        // 清理窗口焦点监听
+        if (unlistenFocus) {
+            unlistenFocus();
+            unlistenFocus = null;
+        }
+        if (unlistenBlur) {
+            unlistenBlur();
+            unlistenBlur = null;
+        }
+
+        // 清理 ResizeObserver
+        if (resizeObserver) {
+            resizeObserver.disconnect();
+            resizeObserver = null;
+        }
     });
 </script>
 
@@ -175,13 +252,14 @@
         <SearchBar
             ref="searchBar"
             :disabled="isLoading"
+            :is-loading="isLoading"
             @search="handleSearch"
             @submit="handleSubmit"
             @clear="handleClear"
             @dropdown-state-change="handleDropdownStateChange"
         />
         <ResponsePanel
-            v-if="hasResponse || isLoading"
+            v-if="hasResponse"
             ref="responseDisplay"
             :content="response"
             :reasoning="reasoning"

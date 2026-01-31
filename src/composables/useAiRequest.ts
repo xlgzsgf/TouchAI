@@ -3,6 +3,7 @@
 import { createAiRequest, updateAiRequest } from '@database/queries';
 import type { AiRequest } from '@database/schema';
 import { aiService } from '@services/ai/manager';
+import { sendNotification } from '@tauri-apps/plugin-notification';
 import { computed, ref } from 'vue';
 
 export interface UseAiRequestOptions {
@@ -23,7 +24,11 @@ export function useAiRequest(options: UseAiRequestOptions = {}) {
     const hasError = computed(() => error.value !== null);
     const hasResponse = computed(() => response.value.length > 0);
 
-    async function sendRequest(prompt: string, modelIdOverride?: string) {
+    async function sendRequest(
+        prompt: string,
+        modelIdOverride?: string,
+        providerIdOverride?: number
+    ) {
         if (!prompt.trim()) {
             console.error('[useAiRequest] Empty prompt provided');
             error.value = new Error('Prompt cannot be empty');
@@ -43,9 +48,15 @@ export function useAiRequest(options: UseAiRequestOptions = {}) {
 
         try {
             // 获取模型（覆盖或默认）
-            const model = modelIdOverride
-                ? await aiService.getModelByModelId(modelIdOverride)
-                : await aiService.getActiveModel();
+            let model;
+            if (modelIdOverride && providerIdOverride) {
+                model = await aiService.getModelByProviderAndModelId(
+                    providerIdOverride,
+                    modelIdOverride
+                );
+            } else {
+                model = await aiService.getActiveModel();
+            }
 
             if (!model) {
                 console.error('[useAiRequest] No active model found');
@@ -59,7 +70,12 @@ export function useAiRequest(options: UseAiRequestOptions = {}) {
                 status: 'streaming',
             });
 
-            const stream = aiService.stream(prompt, options.sessionId, modelIdOverride);
+            const stream = aiService.stream(
+                prompt,
+                options.sessionId,
+                modelIdOverride,
+                providerIdOverride
+            );
 
             for await (const { chunk } of stream) {
                 // 检查是否已被取消
@@ -88,6 +104,21 @@ export function useAiRequest(options: UseAiRequestOptions = {}) {
             }
 
             const duration = Date.now() - startTime;
+
+            // 检查是否为空回复
+            if (!response.value.trim()) {
+                console.warn('[useAiRequest] Model returned empty response');
+
+                // 发送系统通知
+                try {
+                    sendNotification({
+                        title: 'TouchAI - 空回复',
+                        body: '模型返回了空回复，请尝试重新提问或更换模型',
+                    });
+                } catch (notificationError) {
+                    console.error('[useAiRequest] Failed to send notification:', notificationError);
+                }
+            }
 
             await updateAiRequest(currentRequest.value.id, {
                 response: response.value,
@@ -121,6 +152,16 @@ export function useAiRequest(options: UseAiRequestOptions = {}) {
                 });
             }
 
+            // 发送系统通知
+            try {
+                sendNotification({
+                    title: 'TouchAI - 请求失败',
+                    body: err.message || '未知错误',
+                });
+            } catch (notificationError) {
+                console.error('[useAiRequest] Failed to send notification:', notificationError);
+            }
+
             options.onError?.(err);
         } finally {
             isLoading.value = false;
@@ -139,6 +180,7 @@ export function useAiRequest(options: UseAiRequestOptions = {}) {
     function cancel() {
         if (abortController.value) {
             abortController.value.abort();
+            reset();
         }
     }
 

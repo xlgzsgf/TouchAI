@@ -2,7 +2,7 @@
 
 import {
     findMessagesBySessionId,
-    findModelByModelId,
+    findModelByProviderAndModelId,
     findModelsWithProvider,
     updateModelLastUsed,
 } from '@database/queries';
@@ -50,13 +50,18 @@ export class AiServiceManager {
     }
 
     /**
-     * 根据 model_id 获取模型（包含服务商信息）
+     * 根据 provider_id 和 model_id 获取模型（包含服务商信息）
      */
-    async getModelByModelId(modelId: string): Promise<ModelWithProvider | null> {
-        const model = await findModelByModelId(modelId);
+    async getModelByProviderAndModelId(
+        providerId: number,
+        modelId: string
+    ): Promise<ModelWithProvider | null> {
+        const model = await findModelByProviderAndModelId(providerId, modelId);
 
         if (!model) {
-            console.error(`[AiServiceManager] Model "${modelId}" not found`);
+            console.error(
+                `[AiServiceManager] Model "${modelId}" from provider ${providerId} not found`
+            );
             return null;
         }
 
@@ -142,15 +147,21 @@ export class AiServiceManager {
     async request(
         prompt: string,
         sessionId?: number,
-        modelIdOverride?: string
+        modelIdOverride?: string,
+        providerIdOverride?: number
     ): Promise<AiResponse> {
         // 使用覆盖模型或默认模型
         let activeModel: ModelWithProvider | null;
 
-        if (modelIdOverride) {
-            activeModel = await this.getModelByModelId(modelIdOverride);
+        if (modelIdOverride && providerIdOverride) {
+            activeModel = await this.getModelByProviderAndModelId(
+                providerIdOverride,
+                modelIdOverride
+            );
             if (!activeModel) {
-                throw new Error(`Model "${modelIdOverride}" not found or disabled`);
+                throw new Error(
+                    `Model "${modelIdOverride}" from provider ${providerIdOverride} not found or disabled`
+                );
             }
         } else {
             activeModel = await this.getActiveModel();
@@ -183,15 +194,21 @@ export class AiServiceManager {
     async *stream(
         prompt: string,
         sessionId?: number,
-        modelIdOverride?: string
+        modelIdOverride?: string,
+        providerIdOverride?: number
     ): AsyncGenerator<{ chunk: AiStreamChunk; model: ModelWithProvider }, void, unknown> {
         // 使用覆盖模型或默认模型
         let activeModel: ModelWithProvider | null;
 
-        if (modelIdOverride) {
-            activeModel = await this.getModelByModelId(modelIdOverride);
+        if (modelIdOverride && providerIdOverride) {
+            activeModel = await this.getModelByProviderAndModelId(
+                providerIdOverride,
+                modelIdOverride
+            );
             if (!activeModel) {
-                throw new Error(`Model "${modelIdOverride}" not found or disabled`);
+                throw new Error(
+                    `Model "${modelIdOverride}" from provider ${providerIdOverride} not found or disabled`
+                );
             }
         } else {
             activeModel = await this.getActiveModel();

@@ -22,7 +22,7 @@
         (e: 'edit', model: Model): void;
     }
 
-    defineProps<Props>();
+    const props = defineProps<Props>();
     const emit = defineEmits<Emits>();
 
     const { confirm } = useConfirm();
@@ -33,7 +33,18 @@
         isExpanded.value = !isExpanded.value;
     };
 
-    const handleDeleteGroup = async (groupKey: string) => {
+    const handleDeleteGroup = async (groupKey: string, models: Model[]) => {
+        // 检查分组内是否有默认模型
+        const hasDefaultModel = models.some((model) => model.id === props.defaultModelId);
+
+        if (hasDefaultModel) {
+            // 如果分组内有默认模型，不允许删除
+            const { useAlert } = await import('@composables/useAlert');
+            const { warning } = useAlert();
+            warning('该分组包含默认模型，无法批量删除');
+            return;
+        }
+
         const confirmed = await confirm({
             title: '确认删除',
             message: '确定要删除该分组下的所有模型吗？',
@@ -74,7 +85,7 @@
             <button
                 class="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
                 title="删除分组"
-                @click="handleDeleteGroup(group.groupKey)"
+                @click="handleDeleteGroup(group.groupKey, group.models)"
             >
                 <SvgIcon name="trash" class="h-4 w-4" />
             </button>

@@ -42,7 +42,7 @@
     // 计算 placeholder 文本
     const searchPlaceholder = computed(() => {
         if (props.models.length > 0) {
-            return `搜索模型... (${props.models.length} 个)`;
+            return `搜索${props.models.length}个模型...`;
         }
         return '搜索模型...';
     });
@@ -129,7 +129,7 @@
                     模型列表
                 </h3>
 
-                <div class="relative w-48">
+                <div class="relative flex-1">
                     <img
                         :src="searchIcon"
                         alt="search"
@@ -139,7 +139,7 @@
                         v-model="searchQuery"
                         type="text"
                         :placeholder="searchPlaceholder"
-                        class="focus:border-primary-400 w-full flex-1 rounded-lg border border-gray-200 py-1.5 pr-3 pl-9 text-sm text-gray-900 transition-colors focus:outline-none"
+                        class="focus:border-primary-400 w-full rounded-lg border border-gray-200 py-1.5 pr-3 pl-9 text-sm text-gray-900 transition-colors focus:outline-none"
                     />
                 </div>
             </div>
