@@ -4,11 +4,9 @@
 //!
 //! 负责注册和处理全局快捷键
 
-use tauri::AppHandle;
-use tauri_plugin_global_shortcut::{
-    Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutEvent,
-};
 use crate::window;
+use tauri::AppHandle;
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutEvent};
 
 /// 当前注册的快捷键（用于取消注册）
 static mut CURRENT_SHORTCUT: Option<Shortcut> = None;
@@ -105,7 +103,14 @@ fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
     }
 
     match key_code {
-        Some(code) => Ok(Shortcut::new(if modifiers.is_empty() { None } else { Some(modifiers) }, code)),
+        Some(code) => Ok(Shortcut::new(
+            if modifiers.is_empty() {
+                None
+            } else {
+                Some(modifiers)
+            },
+            code,
+        )),
         None => Err("No key code specified".to_string()),
     }
 }

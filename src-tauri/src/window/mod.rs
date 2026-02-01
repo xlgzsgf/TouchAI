@@ -30,6 +30,21 @@ pub async fn resize_search_window(app: AppHandle, height: u32, center: bool) -> 
 
     Ok(())
 }
+
+/**
+ * 用系统默认程序打开文件
+ */
+#[tauri::command]
+pub async fn open_file_with_default_app(app: AppHandle, file_path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    app.opener()
+        .open_path(&file_path, None::<&str>)
+        .map_err(|e| format!("Failed to open file: {}", e))?;
+
+    Ok(())
+}
+
 /// 切换主窗口的可见性
 pub fn toggle_window_visibility(app_handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(window) = app_handle.get_webview_window("main") {

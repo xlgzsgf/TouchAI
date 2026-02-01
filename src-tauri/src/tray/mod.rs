@@ -73,7 +73,7 @@ fn show_tray_menu(
     click_position: PhysicalPosition<f64>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // 菜单尺寸（逻辑像素）
-    let menu_width = 140.0;  // 从 180 调整为 140
+    let menu_width = 140.0; // 从 180 调整为 140
     let menu_height = 134.0; // 3个菜单项，每项约44px高度，加上边框
 
     // 检查托盘菜单窗口是否已存在
@@ -89,10 +89,7 @@ fn show_tray_menu(
         let x = (logical_x - menu_width).max(10.0);
         let y = (logical_y - menu_height).max(10.0);
 
-        window.set_position(tauri::Position::Logical(tauri::LogicalPosition {
-            x,
-            y,
-        }))?;
+        window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }))?;
 
         // 显示并聚焦
         window.show()?;

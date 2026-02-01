@@ -17,15 +17,19 @@ pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
     }
 
     // 创建新的设置窗口
-    WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("/settings".parse().unwrap()))
-        .title("TouchAI - 设置")
-        .inner_size(800.0, 600.0)
-        .min_inner_size(800.0, 600.0)
-        .resizable(true)
-        .decorations(false)
-        .center()
-        .build()
-        .map_err(|e| e.to_string())?;
+    WebviewWindowBuilder::new(
+        &app,
+        "settings",
+        WebviewUrl::App("/settings".parse().unwrap()),
+    )
+    .title("TouchAI - 设置")
+    .inner_size(800.0, 600.0)
+    .min_inner_size(800.0, 600.0)
+    .resizable(true)
+    .decorations(false)
+    .center()
+    .build()
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }

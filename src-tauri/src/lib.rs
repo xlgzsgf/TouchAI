@@ -25,9 +25,12 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_x::init())
+        .plugin(tauri_plugin_fs_pro::init())
         .invoke_handler(tauri::generate_handler![
             window::resize_search_window,
             window::hide_search_window,
+            window::open_file_with_default_app,
             settings::open_settings_window,
             shortcut::register_global_shortcut,
             autostart::enable_autostart,

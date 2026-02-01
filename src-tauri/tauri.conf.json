@@ -32,7 +32,14 @@
     ],
     "security": {
       "csp": null,
-      "dangerousDisableAssetCspModification": true
+      "dangerousDisableAssetCspModification": true,
+        "assetProtocol": {
+            "enable": true,
+            "scope": {
+                "allow": ["**/*"],
+                "requireLiteralLeadingDot": false
+            }
+        }  
     },
     "withGlobalTauri": true
   },

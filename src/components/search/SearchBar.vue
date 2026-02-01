@@ -59,14 +59,12 @@
                 @input="onInput"
             />
 
-            <div
-                v-if="searchQuery"
-                class="ml-2 flex cursor-pointer items-center text-gray-400 transition-colors duration-200 hover:text-gray-600"
-                data-tauri-drag-region="false"
-                @click.stop="clearSearch"
-            >
-                <SvgIcon name="clear" class="h-5 w-5" />
-            </div>
+            <AttachmentList
+                :attachments="attachments"
+                @remove="removeAttachment"
+                @preview="previewAttachment"
+                @overflow-state-change="handleAttachmentOverflowStateChange"
+            />
         </div>
 
         <ModelDropdown
@@ -82,26 +80,26 @@
 
 <script setup lang="ts">
     // Copyright (c) 2025. 千诚. Licensed under GPL v3.
-
     import logoWord from '@assets/logo_word.svg';
     import SvgIcon from '@components/common/SvgIcon.vue';
+    import AttachmentList from '@components/search/AttachmentList.vue';
     import ModelDropdown from '@components/search/ModelDropdown.vue';
     import { findModelsWithProvider } from '@database/queries';
     import type { ModelWithProvider } from '@services/ai/manager';
     import { aiService } from '@services/ai/manager';
     import { getCurrentWindow } from '@tauri-apps/api/window';
+    import { openPath, revealItemInDir } from '@tauri-apps/plugin-opener';
+    import type { Attachment } from '@utils/attachment.ts';
     import { getModelLogoByModelName } from '@utils/modelLogoMatcher';
     import { computed, onMounted, onUnmounted, ref } from 'vue';
 
     interface Props {
         disabled?: boolean;
         isLoading?: boolean;
+        attachments?: Attachment[];
     }
 
-    withDefaults(defineProps<Props>(), {
-        disabled: false,
-        isLoading: false,
-    });
+    const { disabled = false, isLoading = false, attachments = [] } = defineProps<Props>();
 
     const placeholder = '写下你的需求...';
 
@@ -133,6 +131,8 @@
         submit: [query: string];
         clear: [];
         dropdownStateChange: [isOpen: boolean];
+        attachmentOverflowStateChange: [isOpen: boolean];
+        removeAttachment: [id: string];
     }>();
 
     // 加载活动模型
@@ -144,7 +144,6 @@
         }
     };
 
-    // Load active model on mount
     onMounted(async () => {
         await loadActiveModel();
 
@@ -152,7 +151,7 @@
         document.addEventListener('click', handleClickOutside);
 
         // 监听窗口焦点事件，每次获得焦点时重新加载活动模型
-        getCurrentWindow().listen('tauri://focus', async () => {
+        await getCurrentWindow().listen('tauri://focus', async () => {
             await loadActiveModel();
         });
     });
@@ -273,9 +272,28 @@
         modelDropdownRef.value?.handleKeyDown(event);
     }
 
-    function clearSearch() {
-        searchQuery.value = '';
-        emit('clear');
+    // 移除附件
+    function removeAttachment(id: string) {
+        emit('removeAttachment', id);
+    }
+
+    async function previewAttachment(attachment: Attachment) {
+        if (attachment.type === 'image') {
+            await openPath(attachment.path);
+        } else {
+            await revealItemInDir(attachment.path);
+        }
+    }
+
+    // 处理附件溢出下拉框状态变化
+    async function handleAttachmentOverflowStateChange(isOpen: boolean) {
+        if (isOpen) {
+            // 下拉框打开时，扩展窗口高度
+            emit('attachmentOverflowStateChange', true);
+        } else {
+            // 下拉框关闭时，恢复高度
+            emit('attachmentOverflowStateChange', false);
+        }
     }
 
     function clearInput() {
@@ -302,6 +320,16 @@
 <style scoped>
     .search-bar-container {
         border: 1.5px solid #d1d5db;
+    }
+
+    .search-bar-container.loading {
+        border: 2px solid transparent;
+        background-image:
+            linear-gradient(rgba(251, 251, 246, 0.98), rgba(251, 251, 246, 0.98)),
+            linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #8b5cf6, #3b82f6);
+        background-origin: border-box;
+        background-clip: padding-box, border-box;
+        animation: border-flow 1.5s linear infinite;
     }
 
     @keyframes border-flow {
