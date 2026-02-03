@@ -87,7 +87,6 @@
     import { findModelsWithProvider } from '@database/queries';
     import type { ModelWithProvider } from '@services/ai/manager';
     import { aiService } from '@services/ai/manager';
-    import { getCurrentWindow } from '@tauri-apps/api/window';
     import { openPath, revealItemInDir } from '@tauri-apps/plugin-opener';
     import type { Attachment } from '@utils/attachment.ts';
     import { getModelLogoByModelName } from '@utils/modelLogoMatcher';
@@ -149,11 +148,6 @@
 
         // 添加全局点击事件监听，点击外部关闭下拉框
         document.addEventListener('click', handleClickOutside);
-
-        // 监听窗口焦点事件，每次获得焦点时重新加载活动模型
-        await getCurrentWindow().listen('tauri://focus', async () => {
-            await loadActiveModel();
-        });
     });
 
     onUnmounted(() => {
@@ -314,6 +308,7 @@
         handleDropdownKeyDown,
         focus,
         clearInput,
+        loadActiveModel,
     });
 </script>
 

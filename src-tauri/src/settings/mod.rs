@@ -23,8 +23,8 @@ pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
         WebviewUrl::App("/settings".parse().unwrap()),
     )
     .title("TouchAI - 设置")
-    .inner_size(800.0, 600.0)
-    .min_inner_size(800.0, 600.0)
+    .inner_size(1000.0, 700.0)
+    .min_inner_size(1000.0, 700.0)
     .resizable(true)
     .decorations(false)
     .center()

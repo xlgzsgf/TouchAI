@@ -273,6 +273,7 @@
         unlistenFocus = await getCurrentWindow().listen('tauri://focus', async () => {
             await nextTick();
             searchBar.value?.focus();
+            searchBar.value?.loadActiveModel();
         });
 
         unlistenBlur = await getCurrentWindow().listen('tauri://blur', async () => {

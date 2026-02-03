@@ -1,6 +1,7 @@
 // Copyright (c) 2025. 千诚. Licensed under GPL v3
 
 import {
+    findDefaultModelWithProvider,
     findMessagesBySessionId,
     findModelByProviderAndModelId,
     findModelsWithProvider,
@@ -36,10 +37,7 @@ export class AiServiceManager {
      * 获取全局默认模型（包含服务商信息）
      */
     async getActiveModel(): Promise<ModelWithProvider | null> {
-        const models = await findModelsWithProvider();
-
-        // 查找默认模型且服务商已启用
-        const defaultModel = models.find((m) => m.is_default === 1 && m.provider_enabled === 1);
+        const defaultModel = await findDefaultModelWithProvider();
 
         if (!defaultModel) {
             console.error('[AiServiceManager] No default model found or provider disabled');
