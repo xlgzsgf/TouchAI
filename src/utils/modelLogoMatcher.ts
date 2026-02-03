@@ -12,7 +12,7 @@ interface ModelLogoMapping {
 const MODEL_LOGO_MAPPINGS: ModelLogoMapping[] = [
     {
         logo: 'openai.png',
-        keywords: ['openai', 'gpt', 'o1', 'o3'],
+        keywords: ['openai', 'gpt', 'o1', 'o3', 'o4'],
     },
     {
         logo: 'claude.png',
@@ -28,11 +28,11 @@ const MODEL_LOGO_MAPPINGS: ModelLogoMapping[] = [
     },
     {
         logo: 'qwen.png',
-        keywords: ['qwen', 'tongyi', '通义'],
+        keywords: ['qwen', 'tongyi', '通义', 'qwq', 'qvq'],
     },
     {
         logo: 'zhipu.png',
-        keywords: ['glm', 'zhipu', 'chatglm', '智谱'],
+        keywords: ['glm', 'zhipu', 'chatglm', '智谱', 'z-ai', 'zai'],
     },
     {
         logo: 'moonshot.png',
@@ -57,6 +57,26 @@ const MODEL_LOGO_MAPPINGS: ModelLogoMapping[] = [
     {
         logo: 'llama.png',
         keywords: ['llama', 'meta'],
+    },
+    {
+        logo: 'longcat.png',
+        keywords: ['longcat'],
+    },
+    {
+        logo: 'mimo.png',
+        keywords: ['mimo', 'xiaomi'],
+    },
+    {
+        logo: 'cohere.png',
+        keywords: ['cohere', 'command'],
+    },
+    {
+        logo: 'gemma.png',
+        keywords: ['gemma'],
+    },
+    {
+        logo: 'mistral.png',
+        keywords: ['mistral'],
     },
 ];
 
