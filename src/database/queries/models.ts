@@ -1,6 +1,6 @@
 // Copyright (c) 2025. 千诚. Licensed under GPL v3
 
-import { UpdateResult } from 'kysely';
+import { sql, UpdateResult } from 'kysely';
 
 import { db } from '../index';
 import type { Model, ModelUpdate, NewModel } from '../schema';
@@ -18,13 +18,31 @@ export const findDefaultModel = () =>
     db.getKysely().selectFrom('models').selectAll().where('is_default', '=', 1).executeTakeFirst();
 
 /**
- * 查找模型并关联服务商信息（JOIN 查询）
+ * 查找默认模型且服务商已启用（包含服务商信息和元数据）
  */
-export const findModelsWithProvider = () =>
+export const findDefaultModelWithProvider = () =>
     db
         .getKysely()
         .selectFrom('models')
         .innerJoin('providers', 'providers.id', 'models.provider_id')
+        .leftJoin(
+            (eb) =>
+                eb
+                    .selectFrom('llm_metadata')
+                    .selectAll()
+                    .select((eb) =>
+                        eb.fn('length', ['llm_metadata.model_id']).as('model_id_length')
+                    )
+                    .as('llm_metadata'),
+            (join) =>
+                join.on((eb) =>
+                    eb(
+                        eb.fn('lower', ['models.model_id']),
+                        'like',
+                        sql`'%' || lower(llm_metadata.model_id) || '%'`
+                    )
+                )
+        )
         .selectAll('models')
         .select([
             'providers.name as provider_name',
@@ -33,8 +51,81 @@ export const findModelsWithProvider = () =>
             'providers.api_key',
             'providers.enabled as provider_enabled',
             'providers.logo as provider_logo',
+            'llm_metadata.attachment as metadata_attachment',
+            'llm_metadata.modalities as metadata_modalities',
+            'llm_metadata.open_weights as metadata_open_weights',
+            'llm_metadata.reasoning as metadata_reasoning',
+            'llm_metadata.release_date as metadata_release_date',
+            'llm_metadata.temperature as metadata_temperature',
+            'llm_metadata.tool_call as metadata_tool_call',
+            'llm_metadata.knowledge as metadata_knowledge',
+            'llm_metadata.limit as metadata_limit',
         ])
-        .execute();
+        .where('models.is_default', '=', 1)
+        .where('providers.enabled', '=', 1)
+        .groupBy('models.id')
+        .orderBy('llm_metadata.model_id_length', 'desc')
+        .executeTakeFirst();
+
+/**
+ * 查找模型并关联服务商信息和元数据（JOIN 查询）
+ * 使用 LIKE 匹配，忽略大小写，允许部分匹配
+ * 例如：models.model_id = "gpt-4-turbo" 可以匹配 llm_metadata.model_id = "gpt-4"
+ * 如果匹配到多个metadata记录，只取第一个（按model_id长度降序，优先匹配更具体的）
+ */
+export const findModelsWithProvider = (providerId?: number) => {
+    let query = db
+        .getKysely()
+        .selectFrom('models')
+        .innerJoin('providers', 'providers.id', 'models.provider_id')
+        .leftJoin(
+            (eb) =>
+                eb
+                    .selectFrom('llm_metadata')
+                    .selectAll()
+                    .select((eb) =>
+                        eb.fn('length', ['llm_metadata.model_id']).as('model_id_length')
+                    )
+                    .as('llm_metadata'),
+            (join) =>
+                join.on((eb) =>
+                    eb(
+                        eb.fn('lower', ['models.model_id']),
+                        'like',
+                        sql`'%' || lower(llm_metadata.model_id) || '%'`
+                    )
+                )
+        )
+        .selectAll('models')
+        .select([
+            'providers.name as provider_name',
+            'providers.type as provider_type',
+            'providers.api_endpoint',
+            'providers.api_key',
+            'providers.enabled as provider_enabled',
+            'providers.logo as provider_logo',
+            'llm_metadata.attachment as metadata_attachment',
+            'llm_metadata.modalities as metadata_modalities',
+            'llm_metadata.open_weights as metadata_open_weights',
+            'llm_metadata.reasoning as metadata_reasoning',
+            'llm_metadata.release_date as metadata_release_date',
+            'llm_metadata.temperature as metadata_temperature',
+            'llm_metadata.tool_call as metadata_tool_call',
+            'llm_metadata.knowledge as metadata_knowledge',
+            'llm_metadata.limit as metadata_limit',
+        ])
+        .groupBy('models.id')
+        .groupBy('providers.id')
+        .groupBy('llm_metadata.id')
+        .orderBy('models.is_default', 'desc')
+        .orderBy('models.id', 'asc');
+
+    if (providerId !== undefined) {
+        query = query.where('models.provider_id', '=', providerId);
+    }
+
+    return query.execute();
+};
 
 /**
  * 根据服务商 ID 查找模型
@@ -75,6 +166,17 @@ export const createModel = async (data: NewModel): Promise<Model> => {
     }
 
     return result;
+};
+
+/**
+ * 批量创建模型
+ */
+export const createModels = async (data: NewModel[]): Promise<void> => {
+    if (data.length === 0) return;
+
+    await db.getKysely().insertInto('models').values(data).execute();
+
+    return;
 };
 
 /**

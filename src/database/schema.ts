@@ -150,6 +150,26 @@ export interface AiRequestsTable {
 }
 
 /**
+ * LLM 元数据表
+ */
+export interface LlmMetadataTable {
+    id: Generated<number>;
+    model_id: string;
+    name: string;
+    attachment: number;
+    modalities: string; // JSON string
+    open_weights: number;
+    reasoning: number;
+    release_date: string | null;
+    temperature: number;
+    tool_call: number;
+    knowledge: string | null; // JSON string
+    limit: string | null; // JSON string
+    created_at: Generated<string>;
+    updated_at: Generated<string>;
+}
+
+/**
  * 数据库 Schema（Kysely）
  */
 export interface Database {
@@ -159,6 +179,7 @@ export interface Database {
     providers: ProvidersTable;
     models: ModelsTable;
     ai_requests: AiRequestsTable;
+    llm_metadata: LlmMetadataTable;
 }
 
 // ==================== 类型别名 ====================
@@ -186,6 +207,10 @@ export type ModelUpdate = Updateable<ModelsTable>;
 export type AiRequest = Selectable<AiRequestsTable>;
 export type NewAiRequest = Insertable<AiRequestsTable>;
 export type AiRequestUpdate = Updateable<AiRequestsTable>;
+
+export type LlmMetadata = Selectable<LlmMetadataTable>;
+export type NewLlmMetadata = Insertable<LlmMetadataTable>;
+export type LlmMetadataUpdate = Updateable<LlmMetadataTable>;
 
 export type MessageRole = MessagesTable['role'];
 export type ProviderType = ProvidersTable['type'];

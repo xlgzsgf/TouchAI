@@ -121,6 +121,27 @@ export const init001: Migration = {
         await createIndex(kysely, 'idx_ai_requests_session_id', 'ai_requests', ['session_id']);
         await createIndex(kysely, 'idx_ai_requests_status', 'ai_requests', ['status']);
 
+        // 创建 llm_metadata 表
+        await withTimestamps(
+            kysely.schema
+                .createTable('llm_metadata')
+                .ifNotExists()
+                .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+                .addColumn('model_id', 'text', (col) => col.notNull().unique())
+                .addColumn('name', 'text', (col) => col.notNull())
+                .addColumn('attachment', 'integer', (col) => col.notNull().defaultTo(0))
+                .addColumn('modalities', 'text', (col) => col.notNull()) // JSON string
+                .addColumn('open_weights', 'integer', (col) => col.notNull().defaultTo(0))
+                .addColumn('reasoning', 'integer', (col) => col.notNull().defaultTo(0))
+                .addColumn('release_date', 'text')
+                .addColumn('temperature', 'integer', (col) => col.notNull().defaultTo(1))
+                .addColumn('tool_call', 'integer', (col) => col.notNull().defaultTo(0))
+                .addColumn('knowledge', 'text') // JSON string
+                .addColumn('limit', 'text') // JSON string
+        ).execute();
+        await createUpdateTrigger(kysely, 'llm_metadata');
+        await createIndex(kysely, 'idx_llm_metadata_model_id', 'llm_metadata', ['model_id']);
+
         // 插入默认设置（如果不存在）
         const existingSettings = await kysely.selectFrom('settings').select('key').execute();
 
@@ -255,6 +276,11 @@ export const init001: Migration = {
         const kysely = new Kysely<Database>({
             dialect: createTauriSqlDialect(db),
         });
+
+        // 删除 llm_metadata 表
+        await kysely.schema.dropIndex('idx_llm_metadata_model_id').ifExists().execute();
+        await dropUpdateTrigger(kysely, 'llm_metadata');
+        await kysely.schema.dropTable('llm_metadata').ifExists().execute();
 
         // 删除 ai_requests 表
         await kysely.schema.dropIndex('idx_ai_requests_status').ifExists().execute();
