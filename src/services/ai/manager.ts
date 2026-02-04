@@ -7,23 +7,124 @@ import {
     findModelsWithProvider,
     updateModelLastUsed,
 } from '@database/queries';
-import type { Model } from '@database/schema';
+import type { ModelWithProviderAndMetadata } from '@database/queries/models';
+import type { ProviderType } from '@database/schema';
+import {
+    type Attachment,
+    isAttachmentSupported,
+    readAttachmentAsBase64,
+    readAttachmentAsText,
+} from '@utils/attachment';
 
-import { AnthropicProvider } from './providers/anthropic.ts';
+import { AnthropicProvider } from './providers/anthropic';
 import { OpenAiProvider } from './providers/openai';
-import type { AiMessage, AiProvider, AiResponse, AiStreamChunk } from './types';
+import type {
+    AiContentPart,
+    AiMessage,
+    AiProvider,
+    AiProviderConfig,
+    AiResponse,
+    AiStreamChunk,
+} from './types';
+
+interface ProviderAdapter {
+    type: ProviderType;
+    normalizeEndpoint: (endpoint: string) => string;
+    create: (config: AiProviderConfig) => AiProvider;
+}
+
+interface BuildMessagesOptions {
+    prompt: string;
+    history: Array<Pick<AiMessage, 'role'> & { content: string }>;
+    attachments?: Attachment[];
+}
+
+const trimTrailingSlash = (endpoint: string) => endpoint.replace(/\/+$/, '');
+
+const ensureSuffix = (endpoint: string, suffix: string) =>
+    endpoint.endsWith(suffix) ? endpoint : `${endpoint}${suffix}`;
+
+const providerRegistry = new Map<ProviderType, ProviderAdapter>();
+
+function registerProvider(adapter: ProviderAdapter): void {
+    providerRegistry.set(adapter.type, adapter);
+}
+
+registerProvider({
+    type: 'openai',
+    normalizeEndpoint: (endpoint) => ensureSuffix(trimTrailingSlash(endpoint), '/v1'),
+    create: (config) => new OpenAiProvider(config),
+});
+
+registerProvider({
+    type: 'anthropic',
+    normalizeEndpoint: (endpoint) => trimTrailingSlash(endpoint),
+    create: (config) => new AnthropicProvider(config),
+});
+
+function getProviderAdapter(type: ProviderType): ProviderAdapter {
+    const adapter = providerRegistry.get(type);
+    if (!adapter) {
+        throw new Error(`Unknown provider type: ${type}`);
+    }
+    return adapter;
+}
+
+function normalizeProviderEndpoint(type: ProviderType, endpoint: string): string {
+    return getProviderAdapter(type).normalizeEndpoint(endpoint);
+}
+
+function createProviderFromRegistry(type: ProviderType, config: AiProviderConfig): AiProvider {
+    return getProviderAdapter(type).create(config);
+}
+
+async function buildAttachmentParts(attachments: Attachment[]): Promise<AiContentPart[]> {
+    const parts: AiContentPart[] = [];
+    const usableAttachments = attachments.filter((attachment) => isAttachmentSupported(attachment));
+
+    for (const attachment of usableAttachments) {
+        try {
+            if (attachment.type === 'image') {
+                const { data, mimeType } = await readAttachmentAsBase64(attachment);
+                parts.push({ type: 'image', mimeType, data });
+            } else {
+                const { content, isBinary } = await readAttachmentAsText(attachment);
+                parts.push({
+                    type: 'file',
+                    name: attachment.name,
+                    content,
+                    isBinary,
+                });
+            }
+        } catch (error) {
+            console.error('[AiServiceManager] Failed to read attachment:', error);
+        }
+    }
+
+    return parts;
+}
+
+async function buildUnifiedMessages(options: BuildMessagesOptions): Promise<AiMessage[]> {
+    const { prompt, history, attachments = [] } = options;
+    const messages: AiMessage[] = history.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+    }));
+
+    const attachmentParts = await buildAttachmentParts(attachments);
+    const userContent =
+        attachmentParts.length > 0
+            ? ([{ type: 'text', text: prompt }, ...attachmentParts] as AiContentPart[])
+            : prompt;
+
+    messages.push({ role: 'user', content: userContent });
+    return messages;
+}
 
 /**
  * 模型与服务商信息的联合类型
  */
-export type ModelWithProvider = Model & {
-    provider_name: string;
-    provider_type: string;
-    api_endpoint: string;
-    api_key: string | null;
-    provider_enabled: number;
-    provider_logo: string;
-};
+export type ModelWithProvider = ModelWithProviderAndMetadata;
 
 /**
  * AI 服务管理器
@@ -73,59 +174,18 @@ export class AiServiceManager {
     }
 
     /**
-     * 内部方法：创建提供商实例
-     */
-    private _createProvider(
-        providerType: string,
-        apiEndpoint: string,
-        apiKey?: string | null
-    ): AiProvider {
-        const normalizedEndpoint = this.normalizeEndpoint(apiEndpoint, providerType);
-        const config = {
-            apiEndpoint: normalizedEndpoint,
-            apiKey: apiKey || undefined,
-        };
-
-        switch (providerType) {
-            case 'openai':
-                return new OpenAiProvider(config);
-            case 'anthropic':
-                return new AnthropicProvider(config);
-            default:
-                throw new Error(`Unknown provider type: ${providerType}`);
-        }
-    }
-
-    /**
-     * 获取或创建服务商的提供商实例
-     */
-    private getProvider(
-        providerId: number,
-        providerType: string,
-        apiEndpoint: string,
-        apiKey?: string | null
-    ): AiProvider {
-        // 检查缓存
-        const cached = this.providers.get(providerId);
-        if (cached) {
-            return cached;
-        }
-
-        // 创建新实例
-        const provider = this._createProvider(providerType, apiEndpoint, apiKey);
-        this.providers.set(providerId, provider);
-        return provider;
-    }
-
-    /**
      * 创建服务商的提供商实例（公共方法）
      */
     createProviderInstance(
-        providerType: string,
+        providerType: ProviderType,
         apiEndpoint: string,
         apiKey?: string | null
     ): AiProvider {
-        return this._createProvider(providerType, apiEndpoint, apiKey);
+        const normalizedEndpoint = normalizeProviderEndpoint(providerType, apiEndpoint);
+        return createProviderFromRegistry(providerType, {
+            apiEndpoint: normalizedEndpoint,
+            apiKey: apiKey || undefined,
+        });
     }
 
     /**
@@ -146,43 +206,19 @@ export class AiServiceManager {
         prompt: string,
         sessionId?: number,
         modelIdOverride?: string,
-        providerIdOverride?: number
+        providerIdOverride?: number,
+        attachments: Attachment[] = []
     ): Promise<AiResponse> {
-        // 使用覆盖模型或默认模型
-        let activeModel: ModelWithProvider | null;
-
-        if (modelIdOverride && providerIdOverride) {
-            activeModel = await this.getModelByProviderAndModelId(
-                providerIdOverride,
-                modelIdOverride
-            );
-            if (!activeModel) {
-                throw new Error(
-                    `Model "${modelIdOverride}" from provider ${providerIdOverride} not found or disabled`
-                );
-            }
-        } else {
-            activeModel = await this.getActiveModel();
-            if (!activeModel) {
-                throw new Error('No active AI model configured');
-            }
-        }
-
-        const provider = this.getProvider(
-            activeModel.provider_id,
-            activeModel.provider_type,
-            activeModel.api_endpoint,
-            activeModel.api_key
-        );
-
-        const messages = await this.buildMessages(prompt, sessionId);
+        const model = await this.resolveModel(modelIdOverride, providerIdOverride);
+        const provider = this.getProviderForModel(model);
+        const messages = await this.buildRequestMessages(prompt, sessionId, attachments);
 
         const response = await provider.request({
-            model: activeModel.model_id,
+            model: model.model_id,
             messages,
         });
 
-        await updateModelLastUsed(activeModel.id);
+        await updateModelLastUsed(model.id);
         return response;
     }
 
@@ -193,90 +229,21 @@ export class AiServiceManager {
         prompt: string,
         sessionId?: number,
         modelIdOverride?: string,
-        providerIdOverride?: number
+        providerIdOverride?: number,
+        attachments: Attachment[] = []
     ): AsyncGenerator<{ chunk: AiStreamChunk; model: ModelWithProvider }, void, unknown> {
-        // 使用覆盖模型或默认模型
-        let activeModel: ModelWithProvider | null;
-
-        if (modelIdOverride && providerIdOverride) {
-            activeModel = await this.getModelByProviderAndModelId(
-                providerIdOverride,
-                modelIdOverride
-            );
-            if (!activeModel) {
-                throw new Error(
-                    `Model "${modelIdOverride}" from provider ${providerIdOverride} not found or disabled`
-                );
-            }
-        } else {
-            activeModel = await this.getActiveModel();
-            if (!activeModel) {
-                console.error('[AiServiceManager] No active model found');
-                throw new Error('No active AI model configured');
-            }
-        }
-
-        const provider = this.getProvider(
-            activeModel.provider_id,
-            activeModel.provider_type,
-            activeModel.api_endpoint,
-            activeModel.api_key
-        );
-
-        const messages = await this.buildMessages(prompt, sessionId);
+        const model = await this.resolveModel(modelIdOverride, providerIdOverride);
+        const provider = this.getProviderForModel(model);
+        const messages = await this.buildRequestMessages(prompt, sessionId, attachments);
 
         for await (const chunk of provider.stream({
-            model: activeModel.model_id,
+            model: model.model_id,
             messages,
         })) {
-            yield { chunk, model: activeModel };
+            yield { chunk, model };
         }
 
-        await updateModelLastUsed(activeModel.id);
-    }
-
-    /**
-     * 构建消息历史
-     */
-    private async buildMessages(prompt: string, sessionId?: number): Promise<AiMessage[]> {
-        const messages: AiMessage[] = [];
-
-        if (sessionId) {
-            // 加载会话历史
-            const history = await findMessagesBySessionId(sessionId);
-            messages.push(
-                ...history.map((msg) => ({
-                    role: msg.role,
-                    content: msg.content,
-                }))
-            );
-        }
-
-        messages.push({ role: 'user', content: prompt });
-        return messages;
-    }
-
-    /**
-     * 规范化地址，自动拼接 /v1（如果需要）
-     */
-    private normalizeEndpoint(endpoint: string, type: string): string {
-        // 移除末尾的斜杠
-        endpoint = endpoint.replace(/\/+$/, '');
-
-        // 如果已经包含 /v1，直接返回
-        if (endpoint.endsWith('/v1')) {
-            return endpoint;
-        }
-
-        // 根据类型决定是否需要拼接 /v1
-        switch (type) {
-            case 'openai':
-                return `${endpoint}/v1`;
-            case 'anthropic':
-                return `${endpoint}`;
-            default:
-                return endpoint;
-        }
+        await updateModelLastUsed(model.id);
     }
 
     /**
@@ -290,14 +257,71 @@ export class AiServiceManager {
             throw new Error(`Model with id ${modelId} not found`);
         }
 
-        const provider = this.getProvider(
+        const provider = this.getProviderForModel(model);
+        return provider.testConnection();
+    }
+
+    private async resolveModel(
+        modelIdOverride?: string,
+        providerIdOverride?: number
+    ): Promise<ModelWithProvider> {
+        if (modelIdOverride && providerIdOverride) {
+            const model = await this.getModelByProviderAndModelId(
+                providerIdOverride,
+                modelIdOverride
+            );
+            if (!model) {
+                throw new Error(
+                    `Model "${modelIdOverride}" from provider ${providerIdOverride} not found or disabled`
+                );
+            }
+            return model;
+        }
+
+        const activeModel = await this.getActiveModel();
+        if (!activeModel) {
+            throw new Error('No active AI model configured');
+        }
+
+        return activeModel;
+    }
+
+    private getProviderForModel(model: ModelWithProvider): AiProvider {
+        return this.getProvider(
             model.provider_id,
-            model.provider_type,
+            model.provider_type as ProviderType,
             model.api_endpoint,
             model.api_key
         );
+    }
 
-        return provider.testConnection();
+    private getProvider(
+        providerId: number,
+        providerType: ProviderType,
+        apiEndpoint: string,
+        apiKey?: string | null
+    ): AiProvider {
+        const cached = this.providers.get(providerId);
+        if (cached) {
+            return cached;
+        }
+
+        const provider = this.createProviderInstance(providerType, apiEndpoint, apiKey);
+        this.providers.set(providerId, provider);
+        return provider;
+    }
+
+    private async buildRequestMessages(
+        prompt: string,
+        sessionId?: number,
+        attachments: Attachment[] = []
+    ): Promise<AiMessage[]> {
+        const history = sessionId ? await findMessagesBySessionId(sessionId) : [];
+        return buildUnifiedMessages({
+            prompt,
+            history,
+            attachments,
+        });
     }
 }
 

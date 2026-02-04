@@ -4,9 +4,14 @@
  * AI 服务类型定义
  */
 
+export type AiContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'image'; mimeType: string; data: string }
+    | { type: 'file'; name: string; content: string; isBinary: boolean };
+
 export interface AiMessage {
     role: 'user' | 'assistant' | 'system';
-    content: string;
+    content: string | AiContentPart[];
 }
 
 export interface AiRequestOptions {

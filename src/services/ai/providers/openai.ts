@@ -11,6 +11,41 @@ import type {
     ModelInfo,
 } from '../types';
 
+function renderFilePart(name: string, content: string, isBinary: boolean): string {
+    const header = `[文件: ${name}]`;
+    return isBinary ? `${header}\n(二进制 Base64)\n${content}` : `${header}\n${content}`;
+}
+
+function mapOpenAiContent(
+    content: AiRequestOptions['messages'][number]['content']
+): OpenAI.Chat.ChatCompletionMessageParam['content'] {
+    if (!Array.isArray(content)) {
+        return content;
+    }
+
+    return content.map((part) => {
+        if (part.type === 'text') {
+            return { type: 'text', text: part.text };
+        }
+        if (part.type === 'image') {
+            return {
+                type: 'image_url',
+                image_url: { url: `data:${part.mimeType};base64,${part.data}` },
+            };
+        }
+        return { type: 'text', text: renderFilePart(part.name, part.content, part.isBinary) };
+    });
+}
+
+function buildOpenAiMessages(
+    messages: AiRequestOptions['messages']
+): OpenAI.Chat.ChatCompletionMessageParam[] {
+    return messages.map((message) => ({
+        role: message.role,
+        content: mapOpenAiContent(message.content),
+    })) as OpenAI.Chat.ChatCompletionMessageParam[];
+}
+
 export class OpenAiProvider implements AiProvider {
     name = 'OpenAI';
     type = 'openai' as const;
@@ -25,9 +60,10 @@ export class OpenAiProvider implements AiProvider {
     }
 
     async request(options: AiRequestOptions): Promise<AiResponse> {
+        const messages = buildOpenAiMessages(options.messages);
         const completion = await this.client.chat.completions.create({
             model: options.model,
-            messages: options.messages as OpenAI.Chat.ChatCompletionMessageParam[],
+            messages,
             stream: false,
         });
 
@@ -42,9 +78,10 @@ export class OpenAiProvider implements AiProvider {
     }
 
     async *stream(options: AiRequestOptions): AsyncGenerator<AiStreamChunk, void, unknown> {
+        const messages = buildOpenAiMessages(options.messages);
         const stream = await this.client.chat.completions.create({
             model: options.model,
-            messages: options.messages as OpenAI.Chat.ChatCompletionMessageParam[],
+            messages,
             stream: true,
         });
 
