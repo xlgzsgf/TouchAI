@@ -1,6 +1,7 @@
 <!-- Copyright (c) 2025. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
+    import ModelCapabilityTags from '@components/common/ModelCapabilityTags.vue';
     import SvgIcon from '@components/common/SvgIcon.vue';
     import { useAlert } from '@composables/useAlert';
     import { useConfirm } from '@composables/useConfirm';
@@ -44,36 +45,6 @@
 
         const path = `../../assets/logos/models/${logoFileName}`;
         return modelLogos[path]?.default || null;
-    });
-
-    // 计算需要显示的标签
-    const tags = computed(() => {
-        const result = [];
-
-        if (props.model.metadata_reasoning === 1) {
-            result.push({ label: '推理', color: 'blue' });
-        }
-        if (props.model.metadata_tool_call === 1) {
-            result.push({ label: '工具', color: 'green' });
-        }
-        if (props.model.metadata_modalities) {
-            try {
-                const modalities = JSON.parse(props.model.metadata_modalities);
-                if (modalities.input?.includes('image') || modalities.output?.includes('image')) {
-                    result.push({ label: '多模态', color: 'purple' });
-                }
-            } catch {
-                // 忽略解析错误
-            }
-        }
-        if (props.model.metadata_attachment === 1) {
-            result.push({ label: '文件', color: 'orange' });
-        }
-        if (props.model.metadata_open_weights === 1) {
-            result.push({ label: '开源', color: 'indigo' });
-        }
-
-        return result;
     });
 
     const handleDelete = async () => {
@@ -139,26 +110,11 @@
                 <div class="flex flex-wrap items-center gap-2">
                     <h4 class="font-serif text-sm font-medium text-gray-900">{{ model.name }}</h4>
 
-                    <span
-                        v-for="tag in tags"
-                        :key="tag.label"
-                        :class="[
-                            'rounded px-1.5 py-0.5 text-xs font-medium',
-                            {
-                                'bg-blue-50 text-blue-600': tag.color === 'blue',
-                                'bg-green-50 text-green-600': tag.color === 'green',
-                                'bg-purple-50 text-purple-600': tag.color === 'purple',
-                                'bg-orange-50 text-orange-600': tag.color === 'orange',
-                                'bg-indigo-50 text-indigo-600': tag.color === 'indigo',
-                            },
-                        ]"
-                    >
-                        {{ tag.label }}
-                    </span>
+                    <ModelCapabilityTags :model="model" />
                 </div>
 
                 <p v-if="model.last_used_at" class="mt-1 text-xs text-gray-400">
-                    最后使用: {{ new Date(model.last_used_at).toLocaleString('zh-CN') }}
+                    最后使用: {{ new Date(model.last_used_at as string).toLocaleString('zh-CN') }}
                 </p>
             </div>
 

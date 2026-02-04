@@ -9,6 +9,7 @@
         deleteAllMessages,
         deleteAllSessions,
     } from '@database/queries';
+    import { updateModelMetadata } from '@utils/modelMetadata';
     import { onMounted, ref } from 'vue';
 
     interface DataStats {
@@ -165,6 +166,22 @@
             isLoading.value = false;
         }
     };
+
+    const handleUpdateModelMetadata = async () => {
+        try {
+            isLoading.value = true;
+            errorMessage.value = '';
+            successMessage.value = '';
+
+            await updateModelMetadata();
+            successMessage.value = '大模型数据库已更新';
+        } catch (error) {
+            console.error('Failed to update model metadata:', error);
+            errorMessage.value = '更新大模型数据库失败';
+        } finally {
+            isLoading.value = false;
+        }
+    };
 </script>
 
 <template>
@@ -270,6 +287,29 @@
                             @click="handleClearAiRequests"
                         >
                             清除
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
+                <h2 class="font-serif text-lg font-semibold text-gray-900">数据更新</h2>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between rounded-lg bg-gray-50 p-4">
+                        <div>
+                            <div class="font-serif text-sm font-medium text-gray-900">
+                                大模型数据库
+                            </div>
+                            <div class="mt-1 font-serif text-xs text-gray-500">
+                                从远程源同步最新的大模型元数据
+                            </div>
+                        </div>
+                        <button
+                            class="bg-primary-600 hover:bg-primary-700 rounded-lg px-4 py-2 font-serif text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                            :disabled="isLoading"
+                            @click="handleUpdateModelMetadata"
+                        >
+                            更新
                         </button>
                     </div>
                 </div>

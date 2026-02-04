@@ -4,6 +4,7 @@ import { createAiRequest, updateAiRequest } from '@database/queries';
 import type { AiRequest } from '@database/schema';
 import { aiService } from '@services/ai/manager';
 import { sendNotification } from '@tauri-apps/plugin-notification';
+import type { Attachment } from '@utils/attachment';
 import { computed, ref } from 'vue';
 
 export interface UseAiRequestOptions {
@@ -27,7 +28,8 @@ export function useAiRequest(options: UseAiRequestOptions = {}) {
     async function sendRequest(
         prompt: string,
         modelIdOverride?: string,
-        providerIdOverride?: number
+        providerIdOverride?: number,
+        attachments: Attachment[] = []
     ) {
         if (!prompt.trim()) {
             console.error('[useAiRequest] Empty prompt provided');
@@ -74,7 +76,8 @@ export function useAiRequest(options: UseAiRequestOptions = {}) {
                 prompt,
                 options.sessionId,
                 modelIdOverride,
-                providerIdOverride
+                providerIdOverride,
+                attachments
             );
 
             for await (const { chunk } of stream) {

@@ -24,6 +24,7 @@
         updateModel,
         updateProvider,
     } from '@database/queries';
+    import type { ModelWithProviderAndMetadata } from '@database/queries/models';
     import type { Model, NewModel, NewProvider, Provider } from '@database/schema';
     import { aiService } from '@services/ai/manager';
     import { computed, onMounted, ref } from 'vue';
@@ -31,9 +32,10 @@
     const alert = useAlert();
 
     const providers = ref<Provider[]>([]);
-    const modelsCache = ref<Map<number, Model[]>>(new Map()); // 缓存每个服务商的模型
+    const modelsCache = ref<Map<number, ModelWithProviderAndMetadata[]>>(new Map()); // 缓存每个服务商的模型
     const selectedProviderId = ref<number | null>(null);
     const defaultModelId = ref<number | null>(null);
+    const defaultModelProviderId = ref<number | null>(null);
     const loading = ref(true);
     const loadingModels = ref(false);
     const error = ref<string | null>(null);
@@ -67,13 +69,9 @@
 
     const defaultModelProviderIds = computed(() => {
         const ids = new Set<number>();
-        // 遍历所有缓存的模型查找默认模型
-        for (const models of modelsCache.value.values()) {
-            const defaultModel = models.find((m) => m.is_default === 1);
-            if (defaultModel) {
-                ids.add(defaultModel.provider_id);
-                break;
-            }
+        if (defaultModelProviderId.value !== null) {
+            ids.add(defaultModelProviderId.value);
+            return ids;
         }
         return ids;
     });
@@ -88,6 +86,7 @@
 
             const defaultModel = await findDefaultModel();
             defaultModelId.value = defaultModel?.id || null;
+            defaultModelProviderId.value = defaultModel?.provider_id || null;
 
             // 自动选择第一个服务商
             if (providers.value.length > 0 && !selectedProviderId.value) {
@@ -293,9 +292,7 @@
     const handleSetDefaultModel = async (id: number) => {
         try {
             await setDefaultModel(id);
-
-            // 更新 defaultModelId
-            defaultModelId.value = id;
+            await loadProviders();
 
             // 强制刷新模型列表以确保排序正确
             if (selectedProviderId.value) {
