@@ -3,6 +3,8 @@
 <script setup lang="ts">
     import ModelCapabilityTags from '@components/common/ModelCapabilityTags.vue';
     import { findModelsWithProvider } from '@database/queries';
+    import type { ModelDropdownData } from '@services/popup';
+    import { emit as tauriEmit } from '@tauri-apps/api/event';
     import { getModelLogoByModelName } from '@utils/modelLogoMatcher';
     import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
@@ -21,21 +23,24 @@
     }
 
     interface Props {
-        isOpen: boolean;
-        activeModelId: string;
-        activeProviderId: number | null;
-        selectedModelId: string;
-        selectedProviderId: number | null;
-        searchQuery: string;
+        data: ModelDropdownData | null;
+        isInPopup?: boolean;
     }
 
-    interface Emits {
-        (e: 'select', modelDbId: number): void;
-        (e: 'close'): void;
-    }
+    const props = withDefaults(defineProps<Props>(), {
+        isInPopup: false,
+    });
 
-    const props = defineProps<Props>();
-    const emit = defineEmits<Emits>();
+    const emit = defineEmits<{
+        close: [];
+    }>();
+
+    // 从 data 解构出需要的字段
+    const activeModelId = computed(() => props.data?.activeModelId ?? '');
+    const activeProviderId = computed(() => props.data?.activeProviderId ?? null);
+    const selectedModelId = computed(() => props.data?.selectedModelId ?? '');
+    const selectedProviderId = computed(() => props.data?.selectedProviderId ?? null);
+    const searchQuery = computed(() => props.data?.searchQuery ?? '');
 
     const models = ref<ModelOption[]>([]);
     const highlightedIndex = ref(0);
@@ -64,7 +69,7 @@
                     metadata_open_weights: m.metadata_open_weights,
                 }));
         } catch (error) {
-            console.error('[ModelDropdown] Failed to load models:', error);
+            console.error('[ModelDropdownPopup] Failed to load models:', error);
         }
     }
 
@@ -75,8 +80,8 @@
 
     // 根据搜索查询过滤模型
     const filteredModels = computed(() => {
-        if (!props.searchQuery) return models.value;
-        const query = props.searchQuery.toLowerCase().trim();
+        if (!searchQuery.value) return models.value;
+        const query = searchQuery.value.toLowerCase().trim();
         if (!query) return models.value;
 
         const tokens = query.split(/\s+/).filter(Boolean);
@@ -150,6 +155,12 @@
         });
     };
 
+    // 处理模型选择 - 自己 emit 到主窗口
+    async function handleSelect(modelDbId: number) {
+        await tauriEmit('popup-model-select', { modelDbId });
+        emit('close');
+    }
+
     // 键盘导航
     function handleKeyDown(event: KeyboardEvent) {
         if (event.key === 'ArrowDown') {
@@ -166,7 +177,7 @@
         } else if (event.key === 'Enter') {
             event.preventDefault();
             const model = filteredModels.value[highlightedIndex.value];
-            if (model) emit('select', model.id);
+            if (model) handleSelect(model.id);
         } else if (event.key === 'Escape') {
             event.preventDefault();
             emit('close');
@@ -179,20 +190,16 @@
     }
 
     // 重置高亮索引当搜索改变时
-    watch(
-        () => props.searchQuery,
-        () => {
-            highlightedIndex.value = 0;
-        }
-    );
+    watch(searchQuery, () => {
+        highlightedIndex.value = 0;
+    });
 
-    // 重置高亮索引当下拉框打开时
+    // 重置高亮索引当 data 变化时（相当于打开）
     watch(
-        () => props.isOpen,
+        () => props.data,
         async (newVal) => {
             if (newVal) {
                 highlightedIndex.value = 0;
-                // 每次打开下拉框时重新加载模型列表
                 await loadModels();
             }
         }
@@ -207,9 +214,12 @@
 
 <template>
     <div
-        v-if="isOpen"
         ref="dropdownRef"
-        class="custom-scrollbar-thin absolute top-full left-0 z-[9999] mt-2 max-h-96 w-80 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
+        :class="[
+            'custom-scrollbar-thin max-h-96 w-80 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg select-none',
+            isInPopup ? '' : 'absolute top-full left-0 z-[9999] mt-2',
+        ]"
+        @contextmenu.prevent
     >
         <div v-if="!searchQuery" class="border-b border-gray-100 px-4 py-2 text-xs text-gray-400">
             输入模型名称搜索
@@ -226,7 +236,7 @@
                 'flex cursor-pointer items-center gap-3 px-4 py-2',
                 index === highlightedIndex ? 'bg-primary-50' : 'hover:bg-gray-50',
             ]"
-            @click="emit('select', model.id)"
+            @click="handleSelect(model.id)"
         >
             <div class="relative">
                 <img
