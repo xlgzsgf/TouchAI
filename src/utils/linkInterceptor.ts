@@ -105,6 +105,4 @@ export function setupLinkInterceptor(): void {
 
     // 拦截 window.open
     interceptWindowOpen();
-
-    console.log('[LinkInterceptor] 链接拦截器已启用');
 }

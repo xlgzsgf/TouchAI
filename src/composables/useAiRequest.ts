@@ -83,7 +83,6 @@ export function useAiRequest(options: UseAiRequestOptions = {}) {
             for await (const { chunk } of stream) {
                 // 检查是否已被取消
                 if (signal.aborted) {
-                    console.log('[useAiRequest] Request cancelled');
                     throw new Error('Request cancelled');
                 }
 
@@ -135,7 +134,6 @@ export function useAiRequest(options: UseAiRequestOptions = {}) {
 
             // 如果是取消操作，不显示错误
             if (err.message === 'Request cancelled') {
-                console.log('[useAiRequest] Request was cancelled by user');
                 if (currentRequest.value) {
                     await updateAiRequest(currentRequest.value.id, {
                         status: 'cancelled',

@@ -250,8 +250,6 @@
 
     onMounted(async () => {
         await loadSettings();
-        // 应用启动时注册快捷键
-        await registerShortcut(settings.value.globalShortcut);
 
         // 同步开机自启动状态
         try {

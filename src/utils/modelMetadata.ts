@@ -160,8 +160,6 @@ export async function updateModelMetadata(): Promise<void> {
 
         await clearLlmMetadata();
         await insertLlmMetadata(filteredList);
-
-        console.log(`[ModelMetadata] Updated ${filteredList.length} models`);
     } catch (error) {
         console.error('[ModelMetadata] Failed to update metadata:', error);
         throw error;

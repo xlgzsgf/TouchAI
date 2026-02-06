@@ -110,7 +110,6 @@ export class MigrationManager {
 
         // 获取已应用的迁移
         const appliedVersions = await this.getAppliedMigrations();
-        console.log('Applied migrations:', appliedVersions);
 
         // 过滤待处理的迁移
         const pendingMigrations = migrations
@@ -118,16 +117,12 @@ export class MigrationManager {
             .sort((a, b) => a.version - b.version);
 
         if (pendingMigrations.length === 0) {
-            console.log('No pending migrations');
             return;
         }
-
-        console.log(`Running ${pendingMigrations.length} pending migrations...`);
 
         // 执行待处理的迁移
         for (const migration of pendingMigrations) {
             try {
-                console.log(`Applying migration ${migration.version}: ${migration.name}`);
                 await migration.up({
                     execute: this.db.execute.bind(this.db),
                     select: this.db.select.bind(this.db),
@@ -136,7 +131,6 @@ export class MigrationManager {
                     },
                 });
                 await this.recordMigration(migration);
-                console.log(`Migration ${migration.version} applied successfully`);
             } catch (error) {
                 console.error(`Failed to apply migration ${migration.version}:`, error);
                 throw error;

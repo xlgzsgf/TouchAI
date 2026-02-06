@@ -94,7 +94,6 @@ class DatabaseManager {
             this.tauriDb = null;
         }
         this.initialized = false;
-        console.log('Database connection closed');
     }
 
     /**
