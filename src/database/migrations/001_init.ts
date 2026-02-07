@@ -218,8 +218,8 @@ export const init001: Migration = {
             },
             {
                 name: 'MiniMax',
-                type: 'openai',
-                api_endpoint: 'https://api.minimax.chat',
+                type: 'anthropic',
+                api_endpoint: 'https://api.minimaxi.com/anthropic',
                 logo: 'minimax.png',
                 enabled: 0,
                 is_builtin: 1,
