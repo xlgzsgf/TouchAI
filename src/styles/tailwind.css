@@ -9,9 +9,18 @@
 
 @config '@/../tailwind.config.js';
 
+@font-face {
+    font-family: 'Source Han Serif SC';
+    src: url('@/assets/fonts/SourceHanSerifSC-VF.woff2') format('woff2-variations');
+    font-weight: 200 900;
+    font-style: normal;
+    font-display: swap;
+}
+
 @theme {
     --font-sans:
         -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-serif: 'Source Han Serif SC', 'Noto Serif SC', 'Source Han Serif', serif;
 }
 
 /* 全局基础样式 */
