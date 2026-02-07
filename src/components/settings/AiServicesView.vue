@@ -24,9 +24,11 @@
         updateModel,
         updateProvider,
     } from '@database/queries';
+    import { isLlmMetadataEmpty } from '@database/queries/llmMetadata';
     import type { ModelWithProviderAndMetadata } from '@database/queries/models';
     import type { Model, NewModel, NewProvider, Provider } from '@database/schema';
     import { aiService } from '@services/ai/manager';
+    import { updateModelMetadata } from '@utils/modelMetadata';
     import { computed, onMounted, ref } from 'vue';
 
     const alert = useAlert();
@@ -417,7 +419,19 @@
         }
     };
 
-    onMounted(() => {
+    onMounted(async () => {
+        // 检查 llm-metadata 是否为空，如果为空则自动获取
+        try {
+            const isEmpty = await isLlmMetadataEmpty();
+            if (isEmpty) {
+                console.log('[AiServicesView] llm-metadata is empty, fetching...');
+                await updateModelMetadata();
+                console.log('[AiServicesView] llm-metadata fetched successfully');
+            }
+        } catch (error) {
+            console.error('[AiServicesView] Failed to check or update llm-metadata:', error);
+        }
+
         loadProviders();
     });
 </script>

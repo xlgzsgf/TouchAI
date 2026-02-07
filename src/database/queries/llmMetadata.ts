@@ -76,3 +76,16 @@ export async function clearLlmMetadata(): Promise<void> {
     const kysely = await db.getKysely();
     await kysely.deleteFrom('llm_metadata').execute();
 }
+
+/**
+ * 检查 LLM 元数据表是否为空
+ */
+export async function isLlmMetadataEmpty(): Promise<boolean> {
+    const kysely = await db.getKysely();
+    const result = await kysely
+        .selectFrom('llm_metadata')
+        .select(kysely.fn.count<number>('id').as('count'))
+        .executeTakeFirst();
+
+    return (result?.count ?? 0) === 0;
+}
