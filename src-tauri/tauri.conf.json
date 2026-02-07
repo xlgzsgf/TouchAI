@@ -31,7 +31,14 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": {
+        "default-src": "'self' tauri: asset: https: http:",
+        "connect-src": "'self' tauri: asset: https: http: ws: wss:",
+        "script-src": "'self' 'unsafe-inline' 'unsafe-eval'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: asset: https: http:",
+        "font-src": "'self' data:"
+      },
       "dangerousDisableAssetCspModification": true,
         "assetProtocol": {
             "enable": true,
@@ -39,7 +46,7 @@
                 "allow": ["**/*"],
                 "requireLiteralLeadingDot": false
             }
-        }  
+        }
     },
     "withGlobalTauri": true
   },
