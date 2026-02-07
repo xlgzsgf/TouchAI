@@ -137,10 +137,13 @@
         }
     };
 
+    // 清理函数引用
+    let cleanupFn: (() => void) | null = null;
+
     onMounted(async () => {
         await loadActiveModel();
 
-        const cleanup = await popupManager.listen({
+        cleanupFn = await popupManager.listen({
             onModelSelect: handleModelSelect,
             onClose: () => {
                 isModelDropdownOpen.value = false;
@@ -148,9 +151,12 @@
                 restoreSearchState();
             },
         });
+    });
 
-        // 存储清理函数
-        onUnmounted(cleanup);
+    onUnmounted(() => {
+        if (cleanupFn) {
+            cleanupFn();
+        }
     });
 
     function getModelLogoPath(modelId: string): string {

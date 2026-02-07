@@ -110,9 +110,12 @@
         }
     );
 
+    // 清理函数引用
+    let cleanupFn: (() => void) | null = null;
+
     onMounted(async () => {
         // 监听弹窗事件
-        const cleanup = await popupManager.listen({
+        cleanupFn = await popupManager.listen({
             onAttachmentAction: handleAttachmentAction,
             onClose: () => {
                 isOverflowOpen.value = false;
@@ -120,9 +123,12 @@
                 emit('focusSearchBar');
             },
         });
+    });
 
-        // 存储清理函数
-        onUnmounted(cleanup);
+    onUnmounted(() => {
+        if (cleanupFn) {
+            cleanupFn();
+        }
     });
 </script>
 
