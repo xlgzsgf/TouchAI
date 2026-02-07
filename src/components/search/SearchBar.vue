@@ -272,7 +272,13 @@
         } catch (error) {
             console.error('[SearchBar] Failed to select model:', error);
         }
-        // 关闭下拉框并恢复输入框状态
+
+        // 先恢复搜索状态，再关闭下拉框
+        if (isSearchingModel.value) {
+            searchQuery.value = savedSearchQuery.value;
+        }
+
+        // 关闭下拉框
         await closeModelDropdown();
     }
 
@@ -316,7 +322,7 @@
     );
 
     function onInput() {
-        // 如果下拉框打开，输入内容用于搜索模型
+        // 如果下拉框打开，输入内容用于搜索模型，不触发搜索事件
         if (isModelDropdownOpen.value) {
             dropdownSearchQuery.value = searchQuery.value;
             // 更新弹窗的搜索查询
@@ -327,6 +333,7 @@
                 selectedProviderId: selectedProviderId.value ?? null,
                 searchQuery: dropdownSearchQuery.value,
             });
+            return; // 不触发搜索事件
         }
         emit('search', searchQuery.value);
     }
