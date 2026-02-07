@@ -4,7 +4,9 @@
     import ResponsePanel from '@components/search/ResponsePanel.vue';
     import SearchBar from '@components/search/SearchBar.vue';
     import { useAiRequest } from '@composables/useAiRequest';
+    import { useAlert } from '@composables/useAlert';
     import { useWindowResize } from '@composables/useWindowResize';
+    import { getSettingValue, setSetting } from '@database/queries';
     import { popupManager } from '@services/popup';
     import { invoke } from '@tauri-apps/api/core';
     import { emit, listen } from '@tauri-apps/api/event';
@@ -17,6 +19,8 @@
     } from '@utils/attachment.ts';
     import { readClipboard, ReadClipboardItem } from 'tauri-plugin-clipboard-x-api';
     import { computed, nextTick, onMounted, onUnmounted, ref, unref } from 'vue';
+
+    const DEFAULT_GLOBAL_SHORTCUT = 'Alt+Space';
 
     const searchQuery = ref('');
     const searchBar = ref<InstanceType<typeof SearchBar>>();
@@ -69,10 +73,6 @@
             console.error('[SearchView] Failed to handle window blur:', error);
         }
     }
-
-    document.oncontextmenu = function () {
-        return false;
-    };
 
     function handleSearch(query: string) {
         searchQuery.value = query;
@@ -204,7 +204,13 @@
                 return;
             }
 
-            // 优先级5: 其他情况，清空内容
+            // 优先级5: 如果有响应，只清除响应但保留搜索文本
+            if (hasResponse.value) {
+                reset();
+                return;
+            }
+
+            // 优先级6: 其他情况，清空所有内容
             clearAll();
             return;
         }
@@ -350,7 +356,47 @@
             console.error('[SearchView] Failed to handle paste:', error);
         }
     }
+
+    /**
+     * 初始化全局快捷键
+     */
+    async function initializeGlobalShortcut() {
+        try {
+            const storedShortcut = await getSettingValue('global_shortcut');
+            const shortcut = storedShortcut || DEFAULT_GLOBAL_SHORTCUT;
+
+            if (!storedShortcut) {
+                await setSetting('global_shortcut', DEFAULT_GLOBAL_SHORTCUT, '全局快捷键');
+            }
+
+            await invoke('register_global_shortcut', { shortcut });
+        } catch (error) {
+            console.error('[SearchView] Failed to initialize global shortcut:', error);
+        }
+    }
+
+    /**
+     * 初始化 SearchView 特定的功能
+     */
+    async function initializeSearchView() {
+        try {
+            // 1. 初始化全局快捷键
+            await initializeGlobalShortcut();
+
+            // 2. 初始化 Alert 系统
+            useAlert();
+
+            // 3. 初始化 Popup 管理器
+            await popupManager.initialize();
+        } catch (error) {
+            console.error('[SearchView] Failed to initialize:', error);
+        }
+    }
+
     onMounted(async () => {
+        // 初始化 SearchView 特定功能
+        await initializeSearchView();
+
         // 初始化窗口获得焦点监听
         await initFocusListener();
 
