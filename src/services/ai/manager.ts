@@ -141,7 +141,7 @@ export class AiServiceManager {
         const defaultModel = await findDefaultModelWithProvider();
 
         if (!defaultModel) {
-            console.error('[AiServiceManager] No default model found or provider disabled');
+            console.warn('[AiServiceManager] No default model found or provider disabled');
             return null;
         }
 
