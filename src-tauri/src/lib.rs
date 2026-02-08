@@ -60,4 +60,3 @@ pub fn run() {
         panic!("error while running tauri application: {}", err);
     }
 }
-

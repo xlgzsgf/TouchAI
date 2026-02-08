@@ -141,7 +141,9 @@ fn build_file_target(timezone_strategy: TimezoneStrategy) -> Target {
                 ));
             }
             None => {
-                out.finish(format_args!("[{date}][{time}][{level}][{target}] {message}"));
+                out.finish(format_args!(
+                    "[{date}][{time}][{level}][{target}] {message}"
+                ));
             }
         }
     })

@@ -69,7 +69,6 @@ pub fn toggle_search_window_visibility(app_handle: &AppHandle) -> Result<(), Str
     Ok(())
 }
 
-
 #[cfg(target_os = "windows")]
 const DWMWCP_ROUND: u32 = 2;
 #[cfg(target_os = "windows")]
@@ -95,7 +94,7 @@ pub fn set_search_window_style(window: &tauri::WebviewWindow) -> Result<(), Stri
             &DWMWCP_ROUND as *const _ as *const _,
             std::mem::size_of::<u32>() as u32,
         )
-            .map_err(|e| format!("Failed to set rounded corners: {}", e))?;
+        .map_err(|e| format!("Failed to set rounded corners: {}", e))?;
 
         DwmSetWindowAttribute(
             hwnd,
@@ -103,7 +102,7 @@ pub fn set_search_window_style(window: &tauri::WebviewWindow) -> Result<(), Stri
             &DWMWA_COLOR_NONE as *const _ as *const _,
             std::mem::size_of::<u32>() as u32,
         )
-            .map_err(|e| format!("Failed to remove border: {}", e))?;
+        .map_err(|e| format!("Failed to remove border: {}", e))?;
     }
 
     Ok(())

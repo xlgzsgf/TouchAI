@@ -17,24 +17,30 @@ pub fn build_popup_window(
     y: f64,
 ) -> Result<tauri::WebviewWindow, String> {
     let make_builder = || {
-        tauri::WebviewWindowBuilder::new(app, window_label, tauri::WebviewUrl::App(url.clone().into()))
-            .title(title)
-            .inner_size(width, height)
-            .position(x, y)
-            .decorations(false)
-            .transparent(true)
-            .always_on_top(true)
-            .skip_taskbar(true)
-            .resizable(false)
-            .visible(false)
-            .shadow(true)
-            .focused(false)
-            .focusable(false)
+        tauri::WebviewWindowBuilder::new(
+            app,
+            window_label,
+            tauri::WebviewUrl::App(url.clone().into()),
+        )
+        .title(title)
+        .inner_size(width, height)
+        .position(x, y)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .visible(false)
+        .shadow(true)
+        .focused(false)
+        .focusable(false)
     };
 
     let mut builder = make_builder();
     if let Some(main_window) = app.get_webview_window("main") {
-        builder = builder.parent(&main_window).unwrap_or_else(|_| make_builder());
+        builder = builder
+            .parent(&main_window)
+            .unwrap_or_else(|_| make_builder());
     }
 
     builder.build().map_err(|e| e.to_string())
@@ -68,7 +74,10 @@ pub async fn preload_popup_windows(app: AppHandle, registry: &PopupRegistry) -> 
             ) {
                 Ok(_) => {}
                 Err(e) => {
-                    warn!("[PopupRegistry] Failed to create {} popup: {}", config.id, e);
+                    warn!(
+                        "[PopupRegistry] Failed to create {} popup: {}",
+                        config.id, e
+                    );
                 }
             }
         }

@@ -5,8 +5,7 @@ pub mod autostart;
 pub mod shortcut;
 pub mod window;
 
-pub fn invoke_handler()
--> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
+pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         window::resize_search_window,
         window::hide_search_window,
