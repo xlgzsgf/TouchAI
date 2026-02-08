@@ -2,18 +2,11 @@
 
 <script setup lang="ts">
     import { useAlert } from '@composables/useAlert';
-    import { upsertLlmMetadata } from '@database/queries';
     import type { Model } from '@database/schema';
     import { ref, watch } from 'vue';
 
     interface Props {
-        model: Model & {
-            metadata_attachment?: number;
-            metadata_modalities?: string;
-            metadata_open_weights?: number;
-            metadata_reasoning?: number;
-            metadata_tool_call?: number;
-        };
+        model: Model;
     }
 
     interface Emits {
@@ -29,17 +22,17 @@
     const form = ref({
         name: props.model.name,
         model_id: props.model.model_id,
-        reasoning: props.model.metadata_reasoning === 1,
-        tool_call: props.model.metadata_tool_call === 1,
-        attachment: props.model.metadata_attachment === 1,
-        open_weights: props.model.metadata_open_weights === 1,
+        reasoning: props.model.reasoning === 1,
+        tool_call: props.model.tool_call === 1,
+        attachment: props.model.attachment === 1,
+        open_weights: props.model.open_weights === 1,
         multimodal: false,
     });
 
     // 初始化多模态状态
-    if (props.model.metadata_modalities) {
+    if (props.model.modalities) {
         try {
-            const modalities = JSON.parse(props.model.metadata_modalities);
+            const modalities = JSON.parse(props.model.modalities);
             form.value.multimodal =
                 modalities.input?.includes('image') || modalities.output?.includes('image');
         } catch {
@@ -54,16 +47,16 @@
             form.value = {
                 name: newModel.name,
                 model_id: newModel.model_id,
-                reasoning: newModel.metadata_reasoning === 1,
-                tool_call: newModel.metadata_tool_call === 1,
-                attachment: newModel.metadata_attachment === 1,
-                open_weights: newModel.metadata_open_weights === 1,
+                reasoning: newModel.reasoning === 1,
+                tool_call: newModel.tool_call === 1,
+                attachment: newModel.attachment === 1,
+                open_weights: newModel.open_weights === 1,
                 multimodal: false,
             };
 
-            if (newModel.metadata_modalities) {
+            if (newModel.modalities) {
                 try {
-                    const modalities = JSON.parse(newModel.metadata_modalities);
+                    const modalities = JSON.parse(newModel.modalities);
                     form.value.multimodal =
                         modalities.input?.includes('image') || modalities.output?.includes('image');
                 } catch {
@@ -86,20 +79,15 @@
                 output: ['text'],
             };
 
-            // 更新元数据
-            await upsertLlmMetadata(form.value.model_id, {
+            // 直接更新 models 表（包含元数据字段）
+            emit('update', {
                 name: form.value.name,
+                model_id: form.value.model_id,
                 reasoning: form.value.reasoning ? 1 : 0,
                 tool_call: form.value.tool_call ? 1 : 0,
                 attachment: form.value.attachment ? 1 : 0,
                 open_weights: form.value.open_weights ? 1 : 0,
                 modalities: JSON.stringify(modalities),
-            });
-
-            // 更新模型基本信息
-            emit('update', {
-                name: form.value.name,
-                model_id: form.value.model_id,
             });
         } catch (err) {
             alert.error(err instanceof Error ? err.message : '保存失败');

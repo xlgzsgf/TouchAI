@@ -16,11 +16,11 @@
         providerId: number;
         providerName: string;
         logo: string | null;
-        metadata_reasoning?: number | null;
-        metadata_tool_call?: number | null;
-        metadata_modalities?: string | null;
-        metadata_attachment?: number | null;
-        metadata_open_weights?: number | null;
+        reasoning?: number | null;
+        tool_call?: number | null;
+        modalities?: string | null;
+        attachment?: number | null;
+        open_weights?: number | null;
     }
 
     interface Props {
@@ -63,11 +63,11 @@
                     providerId: m.provider_id,
                     providerName: m.provider_name,
                     logo: getModelLogoByModelName(m.model_id),
-                    metadata_reasoning: m.metadata_reasoning,
-                    metadata_tool_call: m.metadata_tool_call,
-                    metadata_modalities: m.metadata_modalities,
-                    metadata_attachment: m.metadata_attachment,
-                    metadata_open_weights: m.metadata_open_weights,
+                    reasoning: m.reasoning,
+                    tool_call: m.tool_call,
+                    modalities: m.modalities,
+                    attachment: m.attachment,
+                    open_weights: m.open_weights,
                 }));
         } catch (error) {
             console.error('[ModelDropdownPopup] Failed to load models:', error);

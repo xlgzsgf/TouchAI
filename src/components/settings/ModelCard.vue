@@ -10,13 +10,7 @@
     import { computed } from 'vue';
 
     interface Props {
-        model: Model & {
-            metadata_attachment?: number;
-            metadata_modalities?: string;
-            metadata_open_weights?: number;
-            metadata_reasoning?: number;
-            metadata_tool_call?: number;
-        };
+        model: Model;
         isDefault: boolean;
         providerEnabled: boolean;
     }

@@ -4,11 +4,11 @@
     import { computed } from 'vue';
 
     interface ModelCapabilitySource {
-        metadata_reasoning?: number | null;
-        metadata_tool_call?: number | null;
-        metadata_modalities?: string | null;
-        metadata_attachment?: number | null;
-        metadata_open_weights?: number | null;
+        reasoning?: number | null;
+        tool_call?: number | null;
+        modalities?: string | null;
+        attachment?: number | null;
+        open_weights?: number | null;
     }
 
     interface Props {
@@ -23,15 +23,15 @@
     const tags = computed(() => {
         const result: Array<{ label: string; color: string }> = [];
 
-        if (props.model.metadata_reasoning === 1) {
+        if (props.model.reasoning === 1) {
             result.push({ label: '推理', color: 'blue' });
         }
-        if (props.model.metadata_tool_call === 1) {
+        if (props.model.tool_call === 1) {
             result.push({ label: '工具', color: 'green' });
         }
-        if (props.model.metadata_modalities) {
+        if (props.model.modalities) {
             try {
-                const modalities = JSON.parse(props.model.metadata_modalities) as {
+                const modalities = JSON.parse(props.model.modalities) as {
                     input?: string[];
                     output?: string[];
                 };
@@ -42,10 +42,10 @@
                 // ignore parse errors
             }
         }
-        if (props.model.metadata_attachment === 1) {
+        if (props.model.attachment === 1) {
             result.push({ label: '文件', color: 'orange' });
         }
-        if (props.model.metadata_open_weights === 1) {
+        if (props.model.open_weights === 1) {
             result.push({ label: '开源', color: 'indigo' });
         }
 

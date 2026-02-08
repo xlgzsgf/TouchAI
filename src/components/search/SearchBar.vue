@@ -312,10 +312,10 @@
         if (!model) {
             return { supportsImages: false, supportsFiles: false };
         }
-        const modalities = parseModalities(model.metadata_modalities);
+        const modalities = parseModalities(model.modalities);
         return {
             supportsImages: Boolean(modalities.input?.includes('image')),
-            supportsFiles: model.metadata_attachment === 1,
+            supportsFiles: model.attachment === 1,
         };
     });
 
