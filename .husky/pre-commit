@@ -1,2 +1,3 @@
+pnpm run check:rust
 pnpm run type:check
 npx lint-staged
