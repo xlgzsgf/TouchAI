@@ -28,10 +28,15 @@
         { logo: 'mistral.png', keywords: ['mistral'] },
     ];
 
-    // 使用 Vite 的 glob import 预加载所有模型 logo
-    const modelLogos = import.meta.glob<{ default: string }>('../../assets/logos/models/*', {
+    // 使用 Vite 的 glob import 预加载所有模型 logo，按文件名索引
+    const rawLogos = import.meta.glob<{ default: string }>('@assets/logos/models/*', {
         eager: true,
     });
+    const modelLogos: Record<string, string> = {};
+    for (const [path, mod] of Object.entries(rawLogos)) {
+        const fileName = path.split('/').pop();
+        if (fileName && mod.default) modelLogos[fileName] = mod.default;
+    }
 
     interface Props {
         modelId: string;
@@ -84,8 +89,7 @@
 
         if (!logoFileName) return null;
 
-        const path = `../../assets/logos/models/${logoFileName}`;
-        return modelLogos[path]?.default || null;
+        return modelLogos[logoFileName] || null;
     });
 
     const fallbackChar = computed(() => {
