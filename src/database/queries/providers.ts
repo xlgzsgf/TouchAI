@@ -1,4 +1,4 @@
-// Copyright (c) 2025. 千诚. Licensed under GPL v3
+﻿// Copyright (c) 2025. 千诚. Licensed under GPL v3
 
 import { and, desc, eq } from 'drizzle-orm';
 
@@ -95,7 +95,7 @@ export const updateProvider = async (id: number, data: ProviderUpdate): Promise<
             .where(and(eq(models.provider_id, id), eq(models.is_default, 1)))
             .get();
 
-        if (defaultModel) {
+        if (defaultModel && defaultModel.id !== undefined) {
             throw new Error('无法禁用包含默认模型的服务商，请先设置其他模型为默认');
         }
     }
@@ -127,7 +127,7 @@ export const deleteProvider = async (id: number): Promise<boolean> => {
         .where(and(eq(models.provider_id, id), eq(models.is_default, 1)))
         .get();
 
-    if (defaultModel) {
+    if (defaultModel && defaultModel.id !== undefined) {
         throw new Error('无法删除包含默认模型的服务商，请先设置其他模型为默认');
     }
 
