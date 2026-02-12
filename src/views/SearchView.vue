@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-    // Copyright (c) 2025. Qian Cheng. Licensed under GPL v3.
+    // Copyright (c) 2026. Qian Cheng. Licensed under GPL v3.
 
     import ResponsePanel from '@components/search/ResponsePanel.vue';
     import SearchBar from '@components/search/SearchBar.vue';
@@ -15,6 +15,7 @@
     } from '@services/AiService/attachments';
     import { native } from '@services/NativeService';
     import { popupManager } from '@services/PopupService';
+    import { runStartupTasks } from '@services/StartupService';
     import { emit, listen } from '@tauri-apps/api/event';
     import { getCurrentWindow } from '@tauri-apps/api/window';
     import { readClipboard, ReadClipboardItem } from 'tauri-plugin-clipboard-x-api';
@@ -88,9 +89,9 @@
 
         await sendRequest(
             query,
+            supportedAttachments,
             selectedModelId || undefined,
-            selectedProviderId || undefined,
-            supportedAttachments
+            selectedProviderId || undefined
         );
     }
 
@@ -335,11 +336,11 @@
      */
     async function initializeGlobalShortcut() {
         try {
-            const storedShortcut = await getSettingValue('global_shortcut');
+            const storedShortcut = await getSettingValue({ key: 'global_shortcut' });
             const shortcut = storedShortcut || DEFAULT_GLOBAL_SHORTCUT;
 
             if (!storedShortcut) {
-                await setSetting('global_shortcut', DEFAULT_GLOBAL_SHORTCUT);
+                await setSetting({ key: 'global_shortcut', value: DEFAULT_GLOBAL_SHORTCUT });
             }
 
             await native.shortcut.registerGlobalShortcut(shortcut);
@@ -378,6 +379,9 @@
 
         document.addEventListener('mousedown', handleSearchWindowMouseDown, true);
         document.body.addEventListener('click', handleSearchWindowClick);
+
+        // 作为主窗口，执行启动任务
+        await runStartupTasks();
     });
 
     onUnmounted(() => {

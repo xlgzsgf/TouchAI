@@ -28,7 +28,7 @@
         updateProvider,
     } from '@database/queries';
     import { isLlmMetadataEmpty } from '@database/queries/llmMetadata.ts';
-    import type { ModelWithProviderAndMetadata } from '@database/queries/models.ts';
+    import type { ModelWithProvider } from '@database/queries/models.ts';
     import type { Model, NewModel, NewProvider, Provider } from '@database/schema.ts';
     import { aiService } from '@services/AiService';
     import { updateModelMetadata } from '@services/AiService/metadatas';
@@ -37,7 +37,7 @@
     const alert = useAlert();
 
     const providers = ref<Provider[]>([]);
-    const modelsCache = ref<Map<number, ModelWithProviderAndMetadata[]>>(new Map()); // 缓存每个服务商的模型
+    const modelsCache = ref<Map<number, ModelWithProvider[]>>(new Map()); // 缓存每个服务商的模型
     const selectedProviderId = ref<number | null>(null);
     const defaultModelId = ref<number | null>(null);
     const defaultModelProviderId = ref<number | null>(null);
@@ -117,7 +117,7 @@
 
         try {
             loadingModels.value = true;
-            const models = await findModelsWithProvider(providerId);
+            const models = await findModelsWithProvider({ providerId });
             modelsCache.value.set(providerId, models);
         } catch (err) {
             console.error('Failed to load models:', err);
@@ -146,7 +146,10 @@
             if (!provider) return;
 
             const newEnabled = provider.enabled === 1 ? 0 : 1;
-            await updateProvider(providerId, { enabled: newEnabled });
+            await updateProvider({
+                id: providerId,
+                providerPatch: { enabled: newEnabled },
+            });
 
             // 重新加载服务商列表
             await loadProviders();
@@ -195,8 +198,10 @@
         if (!selectedProviderId.value) return;
 
         try {
-            await updateProvider(selectedProviderId.value, data);
-            aiService.clearProviderCache(selectedProviderId.value);
+            await updateProvider({
+                id: selectedProviderId.value,
+                providerPatch: data,
+            });
             await loadProviders();
             alert.success('保存成功');
         } catch (err) {
@@ -227,8 +232,10 @@
         if (!selectedProviderId.value) return;
 
         try {
-            await updateProvider(selectedProviderId.value, data);
-            aiService.clearProviderCache(selectedProviderId.value);
+            await updateProvider({
+                id: selectedProviderId.value,
+                providerPatch: data,
+            });
             await loadProviders();
             showEditDialog.value = false;
             alert.success('保存成功');
@@ -239,7 +246,7 @@
 
     const handleDeleteProvider = async (providerId: number) => {
         try {
-            await deleteProvider(providerId);
+            await deleteProvider({ id: providerId });
             await loadProviders();
             if (selectedProviderId.value === providerId) {
                 selectedProviderId.value = providers.value[0]?.id || null;
@@ -269,8 +276,7 @@
 
     const handleUpdateModel = async (id: number, data: Partial<Model>) => {
         try {
-            await updateModel(id, data);
-            aiService.clearProviderCache();
+            await updateModel({ id, modelPatch: data });
             if (selectedProviderId.value) {
                 await loadModelsForProvider(selectedProviderId.value, true); // 强制刷新
             }
@@ -282,7 +288,7 @@
 
     const handleDeleteModel = async (id: number, silent = false) => {
         try {
-            await deleteModel(id);
+            await deleteModel({ id });
             if (selectedProviderId.value) {
                 await loadModelsForProvider(selectedProviderId.value, true); // 强制刷新
             }
@@ -296,7 +302,7 @@
 
     const handleSetDefaultModel = async (id: number) => {
         try {
-            await setDefaultModel(id);
+            await setDefaultModel({ modelId: id });
             await loadProviders();
 
             // 强制刷新模型列表以确保排序正确
@@ -319,7 +325,7 @@
 
         try {
             refreshing.value = true;
-            const provider = await findProviderById(currentProviderId);
+            const provider = await findProviderById({ id: currentProviderId });
             if (!provider) {
                 if (!silent) alert.error('服务商不存在');
                 return;
@@ -375,7 +381,9 @@
                 return;
             }
 
-            const existingModels = await findModelsWithProvider(provider.id);
+            const existingModels = await findModelsWithProvider({
+                providerId: provider.id,
+            });
             const existingModelIds = new Set(existingModels.map((m) => m.model_id));
 
             const newModels = fetchedModels

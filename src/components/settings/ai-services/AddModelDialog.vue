@@ -1,8 +1,7 @@
-<!-- Copyright (c) 2025. 千诚. Licensed under GPL v3 -->
+<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
     import { useAlert } from '@composables/useAlert';
-    import { upsertLlmMetadata } from '@database/queries';
     import type { NewModel } from '@database/schema';
     import { ref } from 'vue';
 
@@ -37,29 +36,39 @@
         }
 
         try {
+            // 检查用户是否自定义了元数据（任何一个能力被勾选）
+            const hasCustomMetadata =
+                form.value.reasoning ||
+                form.value.tool_call ||
+                form.value.attachment ||
+                form.value.open_weights ||
+                form.value.multimodal;
+
             // 构建 modalities JSON
             const modalities = {
                 input: form.value.multimodal ? ['text', 'image'] : ['text'],
                 output: ['text'],
             };
 
-            // 创建元数据
-            await upsertLlmMetadata(form.value.model_id, {
-                name: form.value.name,
-                reasoning: form.value.reasoning ? 1 : 0,
-                tool_call: form.value.tool_call ? 1 : 0,
-                attachment: form.value.attachment ? 1 : 0,
-                open_weights: form.value.open_weights ? 1 : 0,
-                modalities: JSON.stringify(modalities),
-            });
-
             // 创建模型
-            emit('create', {
+            const modelData: NewModel = {
                 provider_id: props.providerId,
                 name: form.value.name,
                 model_id: form.value.model_id,
                 is_default: 0,
-            });
+            };
+
+            // 只有用户自定义了元数据时才设置这些字段
+            if (hasCustomMetadata) {
+                modelData.reasoning = form.value.reasoning ? 1 : 0;
+                modelData.tool_call = form.value.tool_call ? 1 : 0;
+                modelData.attachment = form.value.attachment ? 1 : 0;
+                modelData.open_weights = form.value.open_weights ? 1 : 0;
+                modelData.modalities = JSON.stringify(modalities);
+                modelData.is_custom_metadata = 1;
+            }
+
+            emit('create', modelData);
         } catch (err) {
             alert.error(err instanceof Error ? err.message : '创建失败');
         }

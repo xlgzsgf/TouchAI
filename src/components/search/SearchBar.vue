@@ -67,7 +67,7 @@
     import SvgIcon from '@components/common/SvgIcon.vue';
     import AttachmentList from '@components/search/AttachmentList.vue';
     import { findModelsWithProvider } from '@database/queries';
-    import type { ModelWithProviderAndMetadata } from '@database/queries/models';
+    import type { ModelWithProvider } from '@database/queries/models';
     import { aiService } from '@services/AiService';
     import type { Index } from '@services/AiService/attachments';
     import { popupManager } from '@services/PopupService';
@@ -111,8 +111,8 @@
     const selectedModelId = ref<string | null>(null);
     const selectedModelName = ref<string | null>(null);
     const selectedProviderId = ref<number | null>(null); // 添加 provider_id
-    const activeModel = ref<ModelWithProviderAndMetadata | null>(null);
-    const selectedModel = ref<ModelWithProviderAndMetadata | null>(null);
+    const activeModel = ref<ModelWithProvider | null>(null);
+    const selectedModel = ref<ModelWithProvider | null>(null);
     const isModelDropdownOpen = ref(false);
     const dropdownSearchQuery = ref('');
 
@@ -129,10 +129,10 @@
     // 加载活动模型
     const loadActiveModel = async () => {
         try {
-            activeModel.value =
-                (await aiService.getActiveModel()) as ModelWithProviderAndMetadata | null;
+            activeModel.value = await aiService.getModel();
         } catch (error) {
             console.error('[SearchBar] Failed to load active model:', error);
+            activeModel.value = null;
         }
     };
 

@@ -1,4 +1,4 @@
-<!-- Copyright (c) 2025. 千诚. Licensed under GPL v3 -->
+<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
     import { useAlert } from '@composables/useAlert';
@@ -73,22 +73,44 @@
         }
 
         try {
+            // 检查用户是否修改了元数据
+            const originalModalities = props.model.modalities
+                ? JSON.parse(props.model.modalities)
+                : null;
+            const originalMultimodal = Boolean(
+                originalModalities?.input?.includes('image') ||
+                originalModalities?.output?.includes('image')
+            );
+
+            const metadataChanged =
+                form.value.reasoning !== (props.model.reasoning === 1) ||
+                form.value.tool_call !== (props.model.tool_call === 1) ||
+                form.value.attachment !== (props.model.attachment === 1) ||
+                form.value.open_weights !== (props.model.open_weights === 1) ||
+                form.value.multimodal !== originalMultimodal;
+
             // 构建 modalities JSON
             const modalities = {
                 input: form.value.multimodal ? ['text', 'image'] : ['text'],
                 output: ['text'],
             };
 
-            // 直接更新 models 表（包含元数据字段）
-            emit('update', {
+            const updateData: Partial<Model> = {
                 name: form.value.name,
                 model_id: form.value.model_id,
-                reasoning: form.value.reasoning ? 1 : 0,
-                tool_call: form.value.tool_call ? 1 : 0,
-                attachment: form.value.attachment ? 1 : 0,
-                open_weights: form.value.open_weights ? 1 : 0,
-                modalities: JSON.stringify(modalities),
-            });
+            };
+
+            // 如果用户修改了元数据，则更新元数据字段并标记为自定义
+            if (metadataChanged) {
+                updateData.reasoning = form.value.reasoning ? 1 : 0;
+                updateData.tool_call = form.value.tool_call ? 1 : 0;
+                updateData.attachment = form.value.attachment ? 1 : 0;
+                updateData.open_weights = form.value.open_weights ? 1 : 0;
+                updateData.modalities = JSON.stringify(modalities);
+                updateData.is_custom_metadata = 1;
+            }
+
+            emit('update', updateData);
         } catch (err) {
             alert.error(err instanceof Error ? err.message : '保存失败');
         }

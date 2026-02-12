@@ -159,7 +159,7 @@
     // 从数据库加载设置
     const loadSettings = async () => {
         try {
-            const shortcut = await getSettingValue('global_shortcut');
+            const shortcut = await getSettingValue({ key: 'global_shortcut' });
             if (shortcut) {
                 settings.value.globalShortcut = shortcut;
                 displayShortcut.value = shortcut;
@@ -167,12 +167,12 @@
                 displayShortcut.value = settings.value.globalShortcut;
             }
 
-            const startOnBoot = await getSettingValue('start_on_boot');
+            const startOnBoot = await getSettingValue({ key: 'start_on_boot' });
             if (startOnBoot) {
                 settings.value.startOnBoot = startOnBoot === 'true';
             }
 
-            const startMinimized = await getSettingValue('start_minimized');
+            const startMinimized = await getSettingValue({ key: 'start_minimized' });
             if (startMinimized) {
                 settings.value.startMinimized = startMinimized === 'true';
             }
@@ -212,36 +212,41 @@
     // 保存快捷键到数据库并注册
     const saveShortcutToDatabase = async (shortcut: string) => {
         try {
-            await setSetting('global_shortcut', shortcut);
+            await setSetting({ key: 'global_shortcut', value: shortcut });
         } catch (error) {
             console.error('Failed to save shortcut to database:', error);
             throw error;
         }
     };
 
-    // 保存其他设置
-    const saveOtherSettings = async () => {
+    const saveStartOnBoot = async () => {
         try {
-            // 保存开机自启动设置
-            await setSetting('start_on_boot', settings.value.startOnBoot.toString());
+            await setSetting({
+                key: 'start_on_boot',
+                value: settings.value.startOnBoot.toString(),
+            });
 
-            // 同步到系统
             if (settings.value.startOnBoot) {
                 await native.autostart.enableAutostart();
             } else {
                 await native.autostart.disableAutostart();
             }
-
-            await setSetting('start_minimized', settings.value.startMinimized.toString());
         } catch (error) {
-            console.error('Failed to save settings:', error);
-            alertMessage.value?.error('保存设置失败', 3000);
+            console.error('Failed to save start_on_boot setting:', error);
+            alertMessage.value?.error('保存开机自启动设置失败', 3000);
         }
     };
 
-    // 监听设置变化并自动保存
-    const handleSettingChange = async () => {
-        await saveOtherSettings();
+    const saveStartMinimized = async () => {
+        try {
+            await setSetting({
+                key: 'start_minimized',
+                value: settings.value.startMinimized.toString(),
+            });
+        } catch (error) {
+            console.error('Failed to save start_minimized setting:', error);
+            alertMessage.value?.error('保存设置失败', 3000);
+        }
     };
 
     onMounted(async () => {
@@ -252,7 +257,7 @@
             const isEnabled = await native.autostart.isAutostartEnabled();
             if (isEnabled !== settings.value.startOnBoot) {
                 settings.value.startOnBoot = isEnabled;
-                await setSetting('start_on_boot', isEnabled.toString());
+                await setSetting({ key: 'start_on_boot', value: isEnabled.toString() });
             }
         } catch (error) {
             console.error('Failed to check autostart status:', error);
@@ -353,7 +358,7 @@
                             ]"
                             @click="
                                 settings.startOnBoot = !settings.startOnBoot;
-                                handleSettingChange();
+                                saveStartOnBoot();
                             "
                         >
                             <span
@@ -379,7 +384,7 @@
                             ]"
                             @click="
                                 settings.startMinimized = !settings.startMinimized;
-                                handleSettingChange();
+                                saveStartMinimized();
                             "
                         >
                             <span
