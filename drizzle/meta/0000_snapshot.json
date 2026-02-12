@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "89224ba9-1263-421e-bbc7-493b4e752e4b",
+  "id": "8b037acd-b2ed-448a-ad3e-8cd690ceffc4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "ai_requests": {
@@ -28,16 +28,16 @@
           "notNull": true,
           "autoincrement": false
         },
-        "prompt": {
-          "name": "prompt",
-          "type": "text",
+        "prompt_message_id": {
+          "name": "prompt_message_id",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
-        "response": {
-          "name": "response",
-          "type": "text",
+        "response_message_id": {
+          "name": "response_message_id",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -77,7 +77,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         },
         "updated_at": {
           "name": "updated_at",
@@ -85,7 +85,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {},
@@ -114,6 +114,32 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ai_requests_prompt_message_id_messages_id_fk": {
+          "name": "ai_requests_prompt_message_id_messages_id_fk",
+          "tableFrom": "ai_requests",
+          "tableTo": "messages",
+          "columnsFrom": [
+            "prompt_message_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "ai_requests_response_message_id_messages_id_fk": {
+          "name": "ai_requests_response_message_id_messages_id_fk",
+          "tableFrom": "ai_requests",
+          "tableTo": "messages",
+          "columnsFrom": [
+            "response_message_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -219,7 +245,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         },
         "updated_at": {
           "name": "updated_at",
@@ -227,7 +253,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {
@@ -281,7 +307,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         },
         "updated_at": {
           "name": "updated_at",
@@ -289,7 +315,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {},
@@ -433,13 +459,21 @@
           "notNull": false,
           "autoincrement": false
         },
+        "is_custom_metadata": {
+          "name": "is_custom_metadata",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         },
         "updated_at": {
           "name": "updated_at",
@@ -447,7 +481,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {},
@@ -537,7 +571,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         },
         "updated_at": {
           "name": "updated_at",
@@ -545,7 +579,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {},
@@ -591,7 +625,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         },
         "updated_at": {
           "name": "updated_at",
@@ -599,7 +633,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {
@@ -646,7 +680,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         },
         "updated_at": {
           "name": "updated_at",
@@ -654,12 +688,122 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {
         "settings_key_unique": {
           "name": "settings_key_unique",
+          "columns": [
+            "key"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "statistics": {
+      "name": "statistics",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(datetime('now'))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(datetime('now'))"
+        }
+      },
+      "indexes": {
+        "statistics_key_unique": {
+          "name": "statistics_key_unique",
+          "columns": [
+            "key"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "touchai_meta": {
+      "name": "touchai_meta",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(datetime('now'))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(datetime('now'))"
+        }
+      },
+      "indexes": {
+        "touchai_meta_key_unique": {
+          "name": "touchai_meta_key_unique",
           "columns": [
             "key"
           ],
