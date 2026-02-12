@@ -1,4 +1,4 @@
-// Copyright (c) 2025. 千诚. Licensed under GPL v3
+// Copyright (c) 2026. 千诚. Licensed under GPL v3
 
 /**
  * AI 服务类型定义
@@ -18,6 +18,7 @@ export interface AiRequestOptions {
     model: string;
     messages: AiMessage[];
     stream?: boolean;
+    signal?: AbortSignal;
 }
 
 export interface AiStreamChunk {

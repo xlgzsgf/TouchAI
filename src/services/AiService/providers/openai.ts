@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2025. 千诚. Licensed under GPL v3
+﻿// Copyright (c) 2026. 千诚. Licensed under GPL v3
 
 import { createTauriFetch } from '@services/AiService/providers/shared/tauri-fetch';
 import OpenAI from 'openai';
@@ -81,11 +81,14 @@ export class OpenAiProvider implements AiProvider {
 
     async *stream(options: AiRequestOptions): AsyncGenerator<AiStreamChunk, void, unknown> {
         const messages = buildOpenAiMessages(options.messages);
-        const stream = await this.client.chat.completions.create({
-            model: options.model,
-            messages,
-            stream: true,
-        });
+        const stream = await this.client.chat.completions.create(
+            {
+                model: options.model,
+                messages,
+                stream: true,
+            },
+            { signal: options.signal }
+        );
 
         for await (const chunk of stream) {
             //官方客户端没有提供Reasoning的类型，做适配

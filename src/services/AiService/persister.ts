@@ -1,28 +1,8 @@
-// Copyright (c) 2025. 千诚. Licensed under GPL v3
+// Copyright (c) 2026. 千诚. Licensed under GPL v3
 
 import { createAiRequest, createMessage, createSession, updateAiRequest } from '@database/queries';
 import type { MessageRole, RequestStatus } from '@database/schema';
 import type { AiRequestEntity, AiRequestUpdateData } from '@database/types';
-
-/**
- * 消息角色枚举
- */
-export enum MessageRoleEnum {
-    USER = 'user',
-    ASSISTANT = 'assistant',
-    SYSTEM = 'system',
-}
-
-/**
- * 请求状态枚举
- */
-export enum RequestStatusEnum {
-    PENDING = 'pending',
-    STREAMING = 'streaming',
-    COMPLETED = 'completed',
-    FAILED = 'failed',
-    CANCELLED = 'cancelled',
-}
 
 interface PersisterModel {
     id: number;
@@ -77,7 +57,7 @@ export class Persister {
      */
     async recordRequestStart(): Promise<void> {
         if (!this.userMessageId) {
-            this.userMessageId = await this.persistMessage(MessageRoleEnum.USER, this.prompt);
+            this.userMessageId = await this.persistMessage('user', this.prompt);
         }
 
         await this.ensureRequestRecord();
@@ -88,14 +68,11 @@ export class Persister {
      */
     async markCompleted(options: CompleteRequestOptions): Promise<void> {
         if (options.response.trim() && !this.assistantMessageId) {
-            this.assistantMessageId = await this.persistMessage(
-                MessageRoleEnum.ASSISTANT,
-                options.response
-            );
+            this.assistantMessageId = await this.persistMessage('assistant', options.response);
         }
 
         await this.patchRequest({
-            status: RequestStatusEnum.COMPLETED,
+            status: 'completed',
             error_message: null,
             response_message_id: this.assistantMessageId,
             tokens_used: options.tokensUsed ?? null,
@@ -108,7 +85,7 @@ export class Persister {
      */
     async markFailed(errorMessage: string): Promise<void> {
         await this.patchRequest({
-            status: RequestStatusEnum.FAILED,
+            status: 'failed',
             error_message: errorMessage,
         });
     }
@@ -118,7 +95,7 @@ export class Persister {
      */
     async markCancelled(): Promise<void> {
         await this.patchRequest({
-            status: RequestStatusEnum.CANCELLED,
+            status: 'cancelled',
             error_message: 'Cancelled by user',
         });
     }
@@ -149,25 +126,20 @@ export class Persister {
         }
     }
 
-    private async persistMessage(role: MessageRoleEnum, content: string): Promise<number | null> {
+    private async persistMessage(role: MessageRole, content: string): Promise<number | null> {
         const sessionId = await this.ensureSessionId();
 
         if (!sessionId) {
             return null;
         }
 
-        try {
-            const message = await createMessage({
-                session_id: sessionId,
-                role: role as MessageRole,
-                content,
-            });
+        const message = await createMessage({
+            session_id: sessionId,
+            role: role as MessageRole,
+            content,
+        });
 
-            return message.id;
-        } catch (persistError) {
-            console.error(`[Persister] Failed to persist ${role} message:`, persistError);
-            return null;
-        }
+        return message.id;
     }
 
     private async ensureRequestRecord(): Promise<void> {
@@ -177,17 +149,13 @@ export class Persister {
 
         const sessionId = await this.ensureSessionId();
 
-        try {
-            this.request = await createAiRequest({
-                session_id: sessionId,
-                model_id: this.model.id,
-                prompt_message_id: this.userMessageId,
-                response_message_id: this.assistantMessageId,
-                status: RequestStatusEnum.STREAMING as RequestStatus,
-            });
-        } catch (persistError) {
-            console.error('[Persister] Failed to create ai_request record:', persistError);
-        }
+        this.request = await createAiRequest({
+            session_id: sessionId,
+            model_id: this.model.id,
+            prompt_message_id: this.userMessageId,
+            response_message_id: this.assistantMessageId,
+            status: 'streaming' as RequestStatus,
+        });
     }
 
     private async patchRequest(patch: AiRequestUpdateData): Promise<void> {

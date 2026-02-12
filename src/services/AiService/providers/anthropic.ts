@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2025. 千诚. Licensed under GPL v3
+﻿// Copyright (c) 2026. 千诚. Licensed under GPL v3
 
 import Anthropic from '@anthropic-ai/sdk';
 import { createTauriFetch } from '@services/AiService/providers/shared/tauri-fetch';
@@ -100,12 +100,15 @@ export class AnthropicProvider implements AiProvider {
 
     async *stream(options: AiRequestOptions): AsyncGenerator<AiStreamChunk, void, unknown> {
         const messages = buildAnthropicMessages(options.messages);
-        const stream = await this.client.messages.create({
-            model: options.model,
-            messages,
-            max_tokens: 4096,
-            stream: true,
-        });
+        const stream = await this.client.messages.create(
+            {
+                model: options.model,
+                messages,
+                max_tokens: 4096,
+                stream: true,
+            },
+            { signal: options.signal }
+        );
 
         for await (const event of stream) {
             // 处理 thinking 内容块
