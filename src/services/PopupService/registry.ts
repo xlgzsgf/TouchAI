@@ -3,10 +3,39 @@
 import AttachmentListPopup from '@/views/popups/AttachmentListPopup.vue';
 import ModelDropdownPopup from '@/views/popups/ModelDropdownPopup.vue';
 
-import type { PopupConfig, PopupType, SerializablePopupConfig } from './types';
+import type { PopupConfig, PopupType, SerializablePopupConfig, WindowInfo } from './types';
 
 const GAP = 5;
 const SHADOW_WIDTH = 7;
+
+/**
+ * 计算弹窗的 Y 坐标：优先显示在窗口下方，超出屏幕则翻转到搜索框上方
+ */
+function calculatePopupY(
+    triggerElement: HTMLElement,
+    mainWindow: WindowInfo,
+    popupHeight: number
+): number {
+    // 优先显示在窗口下方（相对于窗口底部）
+    let y = mainWindow.position.y + mainWindow.size.height + GAP;
+
+    // 检查是否超出屏幕底部
+    if (mainWindow.screenSize && mainWindow.screenPosition) {
+        const screenBottom = mainWindow.screenPosition.y + mainWindow.screenSize.height;
+        const popupBottom = y + popupHeight;
+
+        // 如果超出屏幕底部，改为显示在搜索框上方
+        if (popupBottom > screenBottom) {
+            const searchBarContainer = triggerElement.closest('.search-bar-container');
+            const refElement = searchBarContainer || triggerElement;
+            const refRect = refElement.getBoundingClientRect();
+            const refTopY = mainWindow.position.y + refRect.top;
+            y = refTopY - popupHeight - GAP;
+        }
+    }
+
+    return y;
+}
 
 /**
  * Popup 注册表类
@@ -72,14 +101,10 @@ export function initializeBuiltInPopups(): void {
         width: 320,
         height: 384,
         component: ModelDropdownPopup,
-        calculatePosition: (triggerElement, mainWindow) => {
-            const searchBarContainer = triggerElement.closest('.search-bar-container');
-            const searchBarHeight = searchBarContainer?.getBoundingClientRect().height || 60;
-
-            return {
-                x: mainWindow.position.x - SHADOW_WIDTH,
-                y: mainWindow.position.y + searchBarHeight + GAP,
-            };
+        calculatePosition: (triggerElement, mainWindow, dimensions) => {
+            const x = mainWindow.position.x - SHADOW_WIDTH;
+            const y = calculatePopupY(triggerElement, mainWindow, dimensions.height);
+            return { x, y };
         },
     });
 
@@ -90,13 +115,10 @@ export function initializeBuiltInPopups(): void {
         height: 320,
         component: AttachmentListPopup,
         calculatePosition: (triggerElement, mainWindow, dimensions) => {
-            const searchBarContainer = triggerElement.closest('.search-bar-container');
-            const searchBarHeight = searchBarContainer?.getBoundingClientRect().height || 60;
-
-            return {
-                x: mainWindow.position.x + mainWindow.size.width - dimensions.width - SHADOW_WIDTH,
-                y: mainWindow.position.y + searchBarHeight + GAP,
-            };
+            const x =
+                mainWindow.position.x + mainWindow.size.width - dimensions.width - SHADOW_WIDTH;
+            const y = calculatePopupY(triggerElement, mainWindow, dimensions.height);
+            return { x, y };
         },
     });
 }

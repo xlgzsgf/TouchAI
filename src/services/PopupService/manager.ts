@@ -207,11 +207,29 @@ class PopupManager {
         const mainSize = (await mainWindow.outerSize()).toLogical(scaleFactor);
         const innerSize = (await mainWindow.innerSize()).toLogical(scaleFactor);
 
+        // 获取屏幕信息
+        const { currentMonitor } = await import('@tauri-apps/api/window');
+        const monitor = await currentMonitor();
+        const screenSize = monitor
+            ? {
+                  width: monitor.size.width / scaleFactor,
+                  height: monitor.size.height / scaleFactor,
+              }
+            : undefined;
+        const screenPosition = monitor
+            ? {
+                  x: monitor.position.x / scaleFactor,
+                  y: monitor.position.y / scaleFactor,
+              }
+            : undefined;
+
         const windowInfo: WindowInfo = {
             position: { x: mainPosition.x, y: mainPosition.y },
             size: { width: mainSize.width, height: mainSize.height },
             innerSize: { width: innerSize.width, height: innerSize.height },
             scaleFactor,
+            screenSize,
+            screenPosition,
         };
 
         const dimensions = { width: config.width, height: config.height };

@@ -15,6 +15,8 @@ export interface WindowInfo {
     size: { width: number; height: number };
     innerSize: { width: number; height: number };
     scaleFactor: number;
+    screenSize?: { width: number; height: number }; // 屏幕尺寸
+    screenPosition?: { x: number; y: number }; // 屏幕位置
 }
 
 /**

@@ -1,7 +1,7 @@
 // Copyright (c) 2026. 千诚. Licensed under GPL v3
 
 import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
 import { nextTick, onUnmounted, type Ref, ref, watch } from 'vue';
 
 interface WindowResizeOptions {
@@ -42,12 +42,25 @@ export function useWindowResize(options: WindowResizeOptions) {
         if (center) {
             const pos = await win.outerPosition();
             const size = await win.innerSize();
+            const monitor = await currentMonitor();
 
             const logicalX = pos.x / scaleFactor;
             const logicalY = pos.y / scaleFactor;
             const logicalCurrentHeight = size.height / scaleFactor;
 
-            const newY = logicalY - (newHeight - logicalCurrentHeight) / 2;
+            // 计算Y坐标
+            let newY = logicalY - (newHeight - logicalCurrentHeight) / 2;
+
+            // 确保窗口在屏幕内
+            if (monitor) {
+                const monitorY = monitor.position.y / scaleFactor;
+                const monitorHeight = monitor.size.height / scaleFactor;
+                const minY = monitorY;
+                const maxY = monitorY + monitorHeight - newHeight;
+
+                newY = Math.max(minY, Math.min(newY, maxY));
+            }
+
             await win.setPosition(new LogicalPosition(logicalX, newY));
         }
 
