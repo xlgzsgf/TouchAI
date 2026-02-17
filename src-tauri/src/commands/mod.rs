@@ -19,6 +19,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         window::preload_popup_windows,
         window::open_settings_window,
         shortcut::register_global_shortcut,
+        shortcut::get_shortcut_status,
         autostart::enable_autostart,
         autostart::disable_autostart,
         autostart::is_autostart_enabled,

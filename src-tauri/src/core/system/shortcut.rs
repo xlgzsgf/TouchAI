@@ -4,12 +4,14 @@
 //!
 //! 负责解析、注册和处理全局快捷键
 
+use std::sync::Mutex;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::{
     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutEvent, ShortcutState,
 };
 
-static mut CURRENT_SHORTCUT: Option<Shortcut> = None;
+static CURRENT_SHORTCUT: Mutex<Option<Shortcut>> = Mutex::new(None);
+static REGISTRATION_STATUS: Mutex<(bool, Option<String>)> = Mutex::new((false, None));
 
 pub fn create_shortcut_handler() -> impl Fn(&AppHandle, &Shortcut, ShortcutEvent) {
     move |app_handle, _received_shortcut, event| {
@@ -22,21 +24,44 @@ pub fn create_shortcut_handler() -> impl Fn(&AppHandle, &Shortcut, ShortcutEvent
 pub fn register_global_shortcut(app: AppHandle, shortcut: String) -> Result<(), String> {
     let new_shortcut = parse_shortcut(&shortcut)?;
 
-    unsafe {
-        if let Some(old_shortcut) = CURRENT_SHORTCUT {
+    // 注销旧快捷键
+    if let Ok(current) = CURRENT_SHORTCUT.lock() {
+        if let Some(old_shortcut) = *current {
             let _ = app.global_shortcut().unregister(old_shortcut);
         }
     }
 
-    app.global_shortcut()
+    // 尝试注册新快捷键
+    let result = app
+        .global_shortcut()
         .register(new_shortcut)
-        .map_err(|e| format!("Failed to register shortcut: {}", e))?;
+        .map_err(|e| format!("Failed to register shortcut: {}", e));
 
-    unsafe {
-        CURRENT_SHORTCUT = Some(new_shortcut);
+    // 更新状态
+    match result {
+        Ok(_) => {
+            if let Ok(mut current) = CURRENT_SHORTCUT.lock() {
+                *current = Some(new_shortcut);
+            }
+            if let Ok(mut status) = REGISTRATION_STATUS.lock() {
+                *status = (false, None);
+            }
+        }
+        Err(ref e) => {
+            if let Ok(mut status) = REGISTRATION_STATUS.lock() {
+                *status = (true, Some(e.clone()));
+            }
+        }
     }
 
-    Ok(())
+    result
+}
+
+pub fn get_shortcut_status() -> (bool, Option<String>) {
+    REGISTRATION_STATUS
+        .lock()
+        .map(|status| status.clone())
+        .unwrap_or((false, None))
 }
 
 pub fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {

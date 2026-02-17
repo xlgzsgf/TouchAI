@@ -7,3 +7,8 @@ use tauri::AppHandle;
 pub fn register_global_shortcut(app: AppHandle, shortcut: String) -> Result<(), String> {
     crate::core::system::shortcut::register_global_shortcut(app, shortcut)
 }
+
+#[tauri::command]
+pub fn get_shortcut_status() -> (bool, Option<String>) {
+    crate::core::system::shortcut::get_shortcut_status()
+}
