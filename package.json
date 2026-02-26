@@ -17,6 +17,8 @@
         "test:run": "vitest run",
         "type:check": "vue-tsc --noEmit",
         "lint": "eslint . --fix",
+        "lint:check": "eslint .",
+        "format:check": "prettier --check . --ignore-path .prettierignore",
         "format:fix": "prettier --write . --ignore-path .prettierignore && pnpm run format:rust:fix",
         "format:rust:fix": "cargo fmt --manifest-path src-tauri/Cargo.toml --all",
         "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml --all-targets",
