@@ -45,6 +45,7 @@
         "markdown-it-emoji": "^3.0.0",
         "markstream-vue": "0.0.7-beta.9",
         "mermaid": "^11.12.3",
+        "monaco-editor": "0.52.2",
         "openai": "^6.16.0",
         "pinia": "^3.0.4",
         "stream-monaco": "^0.0.18",
@@ -78,7 +79,7 @@
         "typescript": "~5.6.2",
         "typescript-eslint": "^8.49.0",
         "vite": "^6.0.3",
-        "vite-plugin-monaco-editor": "^1.1.0",
+        "vite-plugin-monaco-editor-esm": "^2.0.2",
         "vitest": "^4.0.15",
         "vue-eslint-parser": "^10.2.0",
         "vue-tsc": "^2.1.10"

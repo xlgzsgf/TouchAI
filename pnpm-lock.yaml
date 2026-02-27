@@ -59,6 +59,9 @@ importers:
       mermaid:
         specifier: ^11.12.3
         version: 11.12.3
+      monaco-editor:
+        specifier: 0.52.2
+        version: 0.52.2
       openai:
         specifier: ^6.16.0
         version: 6.16.0(ws@8.18.3)(zod@4.3.6)
@@ -153,9 +156,9 @@ importers:
       vite:
         specifier: ^6.0.3
         version: 6.4.1(@types/node@25.0.1)(jiti@2.6.1)(lightningcss@1.30.2)(yaml@2.8.2)
-      vite-plugin-monaco-editor:
-        specifier: ^1.1.0
-        version: 1.1.0(monaco-editor@0.52.2)
+      vite-plugin-monaco-editor-esm:
+        specifier: ^2.0.2
+        version: 2.0.2(monaco-editor@0.52.2)
       vitest:
         specifier: ^4.0.15
         version: 4.0.15(@types/node@25.0.1)(@vitest/ui@4.0.15)(happy-dom@20.0.11)(jiti@2.6.1)(jsdom@27.3.0(postcss@8.5.6))(lightningcss@1.30.2)(yaml@2.8.2)
@@ -3254,8 +3257,8 @@ packages:
   vfile@6.0.3:
     resolution: {integrity: sha512-KzIbH/9tXat2u30jf+smMwFCsno4wHVdNmzFyL+T/L3UGqqk6JKfVqOFOZEpZSHADH1k40ab6NUIXZq422ov3Q==}
 
-  vite-plugin-monaco-editor@1.1.0:
-    resolution: {integrity: sha512-IvtUqZotrRoVqwT0PBBDIZPNraya3BxN/bfcNfnxZ5rkJiGcNtO5eAOWWSgT7zullIAEqQwxMU83yL9J5k7gww==}
+  vite-plugin-monaco-editor-esm@2.0.2:
+    resolution: {integrity: sha512-XVkOpL/r0rw1NpbO30vUwG4S0THkC9KB1vjjV8olGd49h4/EQsKl3DrxB6KRDwyZNC9mKiiZgk2L6njUYj3oKQ==}
     peerDependencies:
       monaco-editor: '>=0.33.0'
 
@@ -6440,7 +6443,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  vite-plugin-monaco-editor@1.1.0(monaco-editor@0.52.2):
+  vite-plugin-monaco-editor-esm@2.0.2(monaco-editor@0.52.2):
     dependencies:
       monaco-editor: 0.52.2
 
