@@ -5,6 +5,7 @@
 @import 'tailwindcss';
 @import 'markstream-vue/index.css';
 @import 'katex/dist/katex.min.css';
+@import 'vue-sonner/style.css';
 @import './markdown.css';
 
 @font-face {
