@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Manager, Monitor};
+use tauri::{Monitor, WebviewWindow};
 
 const DEFAULT_ANIMATION_DURATION_MS: u64 = 120;
 const ANIMATION_FRAME_INTERVAL_MS: u64 = 16;
@@ -46,16 +46,9 @@ fn window_animation_state() -> &'static WindowAnimationState {
     STATE.get_or_init(WindowAnimationState::default)
 }
 
-/// 按给定上下限裁剪目标高度。
-fn clamp_height(target_height: f64, min_height: Option<f64>, max_height: Option<f64>) -> f64 {
-    let mut value = target_height;
-    if let Some(min) = min_height {
-        value = value.max(min);
-    }
-    if let Some(max) = max_height {
-        value = value.min(max);
-    }
-    value.round()
+/// 规范化目标高度。
+fn clamp_height(target_height: f64) -> f64 {
+    target_height.round()
 }
 
 /// 将窗口 y 坐标约束到当前显示器可视范围内。
@@ -110,31 +103,27 @@ fn apply_window_size(
     Ok(())
 }
 
-/// 调整指定窗口高度，可选居中与动画过渡。
+/// 调整当前调用窗口的高度。
+///
+/// 约定：
+/// - 动画策略统一在 Rust 侧执行；
+/// - 前端可通过 `center` 显式控制是否垂直居中，未传时按窗口类型使用默认策略；
+/// - `main` 窗口默认启用居中 + 动画，其他窗口默认直接调整。
 pub async fn resize_window_height(
-    app: AppHandle,
+    window: WebviewWindow,
     target_height: f64,
-    min_height: Option<f64>,
-    max_height: Option<f64>,
     center: Option<bool>,
-    animate: Option<bool>,
-    duration_ms: Option<u64>,
-    window_label: Option<String>,
 ) -> Result<(), String> {
-    let label = window_label.unwrap_or_else(|| "main".to_string());
-    let window = app
-        .get_webview_window(&label)
-        .ok_or_else(|| format!("Failed to get window: {}", label))?;
-
-    let clamped_height = clamp_height(target_height, min_height, max_height);
+    let label = window.label().to_string();
+    let clamped_height = clamp_height(target_height);
     if clamped_height <= 0.0 {
         return Ok(());
     }
 
-    // 主窗口默认启用“居中 + 动画”，其他窗口默认直接生效。
+    // 居中策略允许前端显式覆盖，默认值仍由后端保证一致性。
     let center_window = center.unwrap_or(label == "main");
-    let animate_resize = animate.unwrap_or(label == "main");
-    let animation_duration_ms = duration_ms.unwrap_or(DEFAULT_ANIMATION_DURATION_MS);
+    let animate_resize = label == "main";
+    let animation_duration_ms = DEFAULT_ANIMATION_DURATION_MS;
 
     let scale_factor = window.scale_factor().map_err(|e| e.to_string())?;
     let size = window.inner_size().map_err(|e| e.to_string())?;
@@ -157,7 +146,7 @@ pub async fn resize_window_height(
         (None, None, None)
     };
 
-    // 关闭动画或变化太小时，走一次性调整分支避免无意义帧循环。
+    // 关闭动画或变化太小时，走一次性调整分支，避免无意义帧循环。
     if !animate_resize || animation_duration_ms == 0 || (clamped_height - start_height).abs() <= 2.0
     {
         apply_window_size(
@@ -174,6 +163,8 @@ pub async fn resize_window_height(
         return Ok(());
     }
 
+    // 为每个窗口维护一个“最新动画令牌”：
+    // 新请求到来会让旧动画自动失效，避免并发动画互相覆盖造成跳帧。
     let state = window_animation_state();
     let token = state.next_token(&label);
     let duration = Duration::from_millis(animation_duration_ms);
@@ -186,6 +177,7 @@ pub async fn resize_window_height(
             return Ok(());
         }
 
+        // 使用 ease-out cubic：开始快、结束慢，收尾更平滑。
         let elapsed = started_at.elapsed();
         let progress = (elapsed.as_secs_f64() / duration.as_secs_f64()).min(1.0);
         let eased = 1.0 - (1.0 - progress).powi(3);

@@ -14,12 +14,7 @@ export interface ShowPopupWindowParams {
 
 export interface ResizeWindowHeightParams {
     targetHeight: number;
-    minHeight?: number;
-    maxHeight?: number;
     center?: boolean;
-    animate?: boolean;
-    durationMs?: number;
-    windowLabel?: string;
 }
 
 export interface TauriLogPayload {

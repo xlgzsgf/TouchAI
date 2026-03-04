@@ -1,7 +1,7 @@
 // Copyright (c) 2026. 千诚. Licensed under GPL v3
 
-import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
-import { currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
+import { native } from '@services/NativeService';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { nextTick, onUnmounted, type Ref, ref, watch } from 'vue';
 
 interface WindowResizeOptions {
@@ -36,41 +36,15 @@ export function useWindowResize(options: WindowResizeOptions) {
 
         if (newHeight === currentHeight.value) return;
 
-        const win = getCurrentWindow();
-        const scaleFactor = await win.scaleFactor();
-
-        if (center) {
-            const pos = await win.outerPosition();
-            const size = await win.innerSize();
-            const monitor = await currentMonitor();
-
-            const logicalX = pos.x / scaleFactor;
-            const logicalY = pos.y / scaleFactor;
-            const logicalCurrentHeight = size.height / scaleFactor;
-
-            // 计算Y坐标
-            let newY = logicalY - (newHeight - logicalCurrentHeight) / 2;
-
-            // 确保窗口在屏幕内
-            if (monitor) {
-                const monitorY = monitor.position.y / scaleFactor;
-                const monitorHeight = monitor.size.height / scaleFactor;
-                const minY = monitorY;
-                const maxY = monitorY + monitorHeight - newHeight;
-
-                newY = Math.max(minY, Math.min(newY, maxY));
-            }
-
-            await win.setPosition(new LogicalPosition(logicalX, newY));
-        }
-
-        const size = await win.innerSize();
-        const logicalWidth = size.width / scaleFactor;
-        await win.setSize(new LogicalSize(logicalWidth, newHeight));
+        // 目标高度与居中策略都交由 Rust 侧执行，确保不同入口行为一致。
+        await native.window.resizeWindowHeight({
+            targetHeight: newHeight,
+            center,
+        });
 
         // 弹窗窗口在 Rust 侧不主动 show，等 invalidate 触发的 resize 完成后再显示
         if (!isMainWindow && pendingShow) {
-            await win.show();
+            await getCurrentWindow().show();
             pendingShow = false;
         }
 
