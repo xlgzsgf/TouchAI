@@ -336,24 +336,21 @@
 
         // 如果快速搜索面板打开，方向键和 Enter 键转发到快速搜索面板
         if (searchBar.value?.isQuickSearchOpen) {
-            if (event.key === 'ArrowUp') {
+            const directionMap = {
+                ArrowUp: 'up',
+                ArrowDown: 'down',
+                ArrowLeft: 'left',
+                ArrowRight: 'right',
+            } as const;
+            const direction = directionMap[event.key as keyof typeof directionMap];
+            if (direction) {
                 event.preventDefault();
-                searchBar.value?.moveQuickSearchSelection?.('up');
-                return;
-            }
-            if (event.key === 'ArrowDown') {
-                event.preventDefault();
-                searchBar.value?.moveQuickSearchSelection?.('down');
+                searchBar.value?.moveQuickSearchSelection?.(direction);
                 return;
             }
             if (event.key === 'Enter') {
                 event.preventDefault();
-                const shortcut = searchBar.value?.getHighlightedQuickShortcut?.();
-                if (shortcut) {
-                    searchBar.value?.openHighlightedQuickShortcut?.();
-                } else if (searchQuery.value.trim()) {
-                    await handleSubmit(searchQuery.value);
-                }
+                await searchBar.value?.openHighlightedQuickShortcut?.();
                 return;
             }
         }

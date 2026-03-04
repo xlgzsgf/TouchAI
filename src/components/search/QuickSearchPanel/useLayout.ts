@@ -119,7 +119,9 @@ export function useLayout(options: UseLayoutOptions) {
             1,
             Math.floor((availableWidth - BASE_GAP_PX) / (ITEM_SIZE_PX + BASE_GAP_PX))
         );
-        const columns = Math.min(fitColumns, MAX_COLUMNS, Math.max(results.value.length, 1));
+        // 列数按可用宽度决定，不再被结果数截断。
+        // 这样容器可以保持居中，而结果项始终从容器左侧开始排布。
+        const columns = Math.min(fitColumns, MAX_COLUMNS);
 
         let gap = BASE_GAP_PX;
         const requiredWidthAtBaseGap = columns * ITEM_SIZE_PX + (columns + 1) * BASE_GAP_PX;

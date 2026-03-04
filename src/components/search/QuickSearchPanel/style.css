@@ -9,6 +9,9 @@
     max-height: var(--quick-selection-max-height, 200px);
     padding: var(--quick-edge-space, 4px);
     box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
 }
 
 .quick-search-scrollbar {
@@ -26,7 +29,9 @@
     --quick-item-size: 88px;
     display: grid;
     width: max-content;
-    margin: 0 auto;
+    margin: 0;
+    flex: 0 0 auto;
+    justify-content: start;
     align-content: start;
 }
 
