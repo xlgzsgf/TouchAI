@@ -27,7 +27,7 @@ fn main() {
     {
         cc::Build::new()
             .file("vendor/everything/Everything.c")
-            .compile("everything");
+            .compile("everything_sdk");
     }
 
     tauri_build::build()
