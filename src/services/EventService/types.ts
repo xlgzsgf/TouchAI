@@ -22,6 +22,9 @@ export enum AppEvent {
     // 窗口事件
     WINDOW_FOCUS = 'window:focus',
     WINDOW_RESIZE = 'window:resize',
+
+    // 资源事件
+    FONT_READY = 'font:ready',
 }
 
 // ==================== MCP 事件 ====================
@@ -63,6 +66,13 @@ export interface WindowResizeEvent {
     height: number;
 }
 
+// ==================== 资源事件 ====================
+
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface FontReadyEvent {
+    // 空 payload，仅作为通知
+}
+
 // ==================== 事件映射 ====================
 
 /**
@@ -78,6 +88,9 @@ export interface AppEventMap {
     // 窗口事件
     [AppEvent.WINDOW_FOCUS]: WindowFocusEvent;
     [AppEvent.WINDOW_RESIZE]: WindowResizeEvent;
+
+    // 资源事件
+    [AppEvent.FONT_READY]: FontReadyEvent;
 }
 
 export type AppEventName = keyof AppEventMap;

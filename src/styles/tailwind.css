@@ -8,18 +8,11 @@
 @import 'vue-sonner/style.css';
 @import './markdown.css';
 
-@font-face {
-    font-family: 'Source Han Serif SC';
-    src: url('@/assets/fonts/SourceHanSerifSC-VF.woff2') format('woff2-variations');
-    font-weight: 200 900;
-    font-style: normal;
-    font-display: swap;
-}
-
 @theme {
     --font-sans:
         -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    --font-serif: 'Source Han Serif SC', 'Noto Serif SC', 'Source Han Serif', serif;
+    --font-serif:
+        'Source Han Serif SC', 'Source Han Serif CN', 'Noto Serif SC', 'Source Han Serif', serif;
 
     /* 背景色 */
     --color-background-primary: rgba(251, 251, 246, 0.98);

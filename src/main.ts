@@ -14,6 +14,7 @@ import App from './App.vue';
 import router from './router';
 import { useMcpStore } from './stores/mcp';
 import { useSettingsStore } from './stores/settings';
+import { initializeFontLoader } from './utils/font';
 
 function isInternalLink(url: string): boolean {
     if (!url || url === '#' || url.startsWith('#')) {
@@ -94,20 +95,23 @@ async function initializeApp() {
     // 3. 禁止右键菜单（全局）
     document.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // 6. 初始化数据库（仅主窗口、设置窗口、模型弹窗）
+    // 4. 初始化字体加载监听器
+    initializeFontLoader();
+
+    // 5. 初始化数据库（仅主窗口、设置窗口、模型弹窗）
     const windowLabel = getCurrentWindow().label;
     if (['main', 'settings', 'popup-model-dropdown-popup'].includes(windowLabel)) {
         await db.init();
     }
 
-    // 5. 创建并挂载 Vue 应用
+    // 6. 创建并挂载 Vue 应用
     const app = createApp(App);
     const pinia = createPinia();
     app.use(pinia);
     app.use(router);
     app.mount('#app');
 
-    // 6. 仅主窗口连接服务器，仅主窗口和设置窗口初始化 MCP
+    // 7. 仅主窗口连接服务器，仅主窗口和设置窗口初始化 MCP
     if (windowLabel == 'main') {
         await mcpManager.autoConnect();
     }

@@ -73,6 +73,7 @@ export const eventService = new EventService();
 export type {
     AppEventMap,
     AppEventName,
+    FontReadyEvent,
     GeneralSettingKey,
     McpServerStatus,
     McpStatusChangeEvent,
