@@ -2,31 +2,26 @@
 
 import { createRouter, createWebHistory } from 'vue-router';
 
-import PopupView from '@/views/PopupView.vue';
-import SearchView from '@/views/SearchView.vue';
-import SettingsView from '@/views/SettingsView.vue';
-import TrayView from '@/views/TrayView.vue';
-
 const routes = [
     {
         path: '/',
         name: 'Search',
-        component: SearchView,
+        component: () => import('@/views/SearchView.vue'),
     },
     {
         path: '/settings',
         name: 'Settings',
-        component: SettingsView,
+        component: () => import('@/views/SettingsView.vue'),
     },
     {
         path: '/tray-menu',
         name: 'TrayMenu',
-        component: TrayView,
+        component: () => import('@/views/TrayView.vue'),
     },
     {
         path: '/popup',
         name: 'Popup',
-        component: PopupView,
+        component: () => import('@/views/PopupView.vue'),
     },
 ];
 
