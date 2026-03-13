@@ -33,6 +33,9 @@
     const modelCapabilities = ref({ supportsImages: false, supportsFiles: false });
     const isPinned = ref(false);
     const isDragging = ref(false);
+    // 开发模式下通过 Ctrl 暂停/恢复失焦隐藏，方便调试时切换 DevTools 而不触发窗口隐藏。
+    const isDevBlurHideSuspended = ref(false);
+    const isDevMode = import.meta.env.DEV;
 
     // 请求队列状态
     const pendingRequest = ref<{
@@ -67,7 +70,7 @@
                     isWaitingForCompletion.value = false;
 
                     // 清空搜索框和附件
-                    searchBar.value?.clearInput();
+                    searchBar.value?.clearInput({ preserveModelTag: true });
                     searchQuery.value = '';
                     attachments.value = [];
 
@@ -98,6 +101,7 @@
     // 是否应该在失焦时隐藏窗口（只有置顶且有对话历史时才不隐藏，拖动时也不隐藏）
     const shouldHideOnBlur = computed(() => {
         if (isDragging.value) return false;
+        if (isDevMode && isDevBlurHideSuspended.value) return false;
         return !(isPinned.value && conversationHistory.value.length > 0);
     });
 
@@ -111,14 +115,13 @@
 
             // 如果应用完全失去焦点
             if (!appFocused) {
-                // 记录隐藏时间
-                recordHideTime();
-
                 // 无条件执行弹窗隐藏与状态重置，避免可见性检查导致状态残留
                 await popupManager.hide();
 
                 // 隐藏主窗口
                 if (shouldHideOnBlur.value) {
+                    // 仅在实际隐藏时记录时间，避免开发调试暂停隐藏时误触发超时清理。
+                    recordHideTime();
                     await native.window.hideSearchWindow();
                 }
             }
@@ -160,7 +163,7 @@
         const supportedAttachments = attachments.value.filter(isAttachmentSupported);
 
         // 清空搜索框和附件
-        searchBar.value?.clearInput();
+        searchBar.value?.clearInput({ preserveModelTag: true });
         searchQuery.value = '';
         attachments.value = [];
 
@@ -179,11 +182,15 @@
         attachments.value = [];
     }
 
-    // 处理移除附件
-    function handleRemoveAttachment(id: string) {
+    // 处理移除附件：fromEditor 为 true 表示由编辑器 NodeSync 触发（标签已删除），
+    // 此时只需同步外层数组；否则还需联动删除编辑器中的标签节点。
+    function handleRemoveAttachment(id: string, fromEditor = false) {
         const index = attachments.value.findIndex((a) => a.id === id);
         if (index !== -1) {
             attachments.value.splice(index, 1);
+        }
+        if (!fromEditor) {
+            searchBar.value?.removeAttachmentTagById(id);
         }
     }
 
@@ -269,6 +276,11 @@
 
     // 键盘事件监听
     async function handleKeyDown(event: KeyboardEvent) {
+        if (isDevMode && event.key === 'Control' && !event.repeat) {
+            isDevBlurHideSuspended.value = !isDevBlurHideSuspended.value;
+            return;
+        }
+
         // Tab 键切换焦点到响应模块
         if (event.key === 'Tab' && conversationHistory.value.length > 0) {
             event.preventDefault();
@@ -334,24 +346,47 @@
             }
         }
 
-        // 如果快速搜索面板打开，方向键和 Enter 键转发到快速搜索面板
+        // 如果快速搜索面板打开，根据高亮状态分流处理：
+        // - 有高亮项：方向键导航 + Enter 打开高亮项（面板完全接管键盘）
+        // - 无高亮项：仅 ArrowDown 激活高亮，Enter 关闭面板并发送会话
+        //   其余按键交还编辑器（如 ArrowLeft/Right 移动光标）
         if (searchBar.value?.isQuickSearchOpen) {
-            const directionMap = {
-                ArrowUp: 'up',
-                ArrowDown: 'down',
-                ArrowLeft: 'left',
-                ArrowRight: 'right',
-            } as const;
-            const direction = directionMap[event.key as keyof typeof directionMap];
-            if (direction) {
-                event.preventDefault();
-                searchBar.value?.moveQuickSearchSelection?.(direction);
-                return;
-            }
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                await searchBar.value?.openHighlightedQuickShortcut?.();
-                return;
+            const hasHighlight = searchBar.value?.getHighlightedQuickShortcut?.() !== null;
+
+            if (hasHighlight) {
+                // 有高亮项：四向方向键转发，Enter 打开高亮项
+                const directionMap = {
+                    ArrowUp: 'up',
+                    ArrowDown: 'down',
+                    ArrowLeft: 'left',
+                    ArrowRight: 'right',
+                } as const;
+                const direction = directionMap[event.key as keyof typeof directionMap];
+                if (direction) {
+                    event.preventDefault();
+                    searchBar.value?.moveQuickSearchSelection?.(direction);
+                    return;
+                }
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    await searchBar.value?.openHighlightedQuickShortcut?.();
+                    return;
+                }
+            } else {
+                // 无高亮项：ArrowDown 激活首项高亮，其他方向键不拦截，Enter 关闭面板并发送
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    searchBar.value?.moveQuickSearchSelection?.('down');
+                    return;
+                }
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    searchBar.value?.closeQuickSearchPanel?.();
+                    if (searchQuery.value.trim()) {
+                        await handleSubmit(searchQuery.value);
+                    }
+                    return;
+                }
             }
         }
 
@@ -365,8 +400,11 @@
                     return;
                 }
             }
-            // 按上键：发送会话（相当于 Enter）
+            // 按上键：仅单行时发送会话（多行时让 ProseMirror 处理光标移动）
             if (event.key === 'ArrowUp') {
+                if (searchBar.value?.isMultiLine?.()) {
+                    return;
+                }
                 event.preventDefault();
                 if (searchQuery.value.trim()) {
                     await handleSubmit(searchQuery.value);
@@ -408,8 +446,8 @@
             }
         }
 
-        // Enter 键提交查询
-        if (event.key === 'Enter') {
+        // Enter 键提交查询（Shift+Enter 由 Tiptap 处理换行）
+        if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
             // 允许在加载时提交（会进入队列），但必须有内容
             if (searchQuery.value.trim()) {
@@ -461,6 +499,14 @@
                 const attachment = await createAttachment(type, path);
                 attachment.supportStatus = getAttachmentSupportStatus(attachment);
                 attachments.value.push(attachment);
+
+                // 同步插入附件标签到编辑器
+                searchBar.value?.addAttachmentTag({
+                    attachmentId: attachment.id,
+                    fileName: attachment.name,
+                    fileType: attachment.type,
+                    preview: attachment.preview,
+                });
             }
 
             // 处理图片
@@ -469,8 +515,20 @@
             }
 
             if (files && files?.value?.length > 0) {
-                for (const filePath of files.value) {
-                    await addAttachment('file', filePath);
+                // 并行创建附件（I/O 密集），然后顺序插入编辑器标签（避免并发修改编辑器状态）。
+                const created = await Promise.all(
+                    files.value.map((filePath) => createAttachment('file', filePath))
+                );
+                for (const attachment of created) {
+                    attachment.supportStatus = getAttachmentSupportStatus(attachment);
+                    attachments.value.push(attachment);
+
+                    searchBar.value?.addAttachmentTag({
+                        attachmentId: attachment.id,
+                        fileName: attachment.name,
+                        fileType: attachment.type,
+                        preview: attachment.preview,
+                    });
                 }
             }
         } catch (error) {
@@ -532,8 +590,9 @@
         // 初始化窗口获得焦点监听
         await initFocusListener();
 
-        // 添加全局键盘事件监听
-        window.addEventListener('keydown', handleKeyDown);
+        // 使用捕获阶段，在 Tiptap 内部 keydown handler 之前拦截，
+        // 确保方向键导航、Enter 提交等逻辑优先于 ProseMirror 默认行为。
+        window.addEventListener('keydown', handleKeyDown, true);
 
         document.addEventListener('mousedown', handleSearchWindowMouseDown, true);
         document.body.addEventListener('click', handleSearchWindowClick);
@@ -544,7 +603,7 @@
 
     onUnmounted(() => {
         // 清理全局键盘事件监听
-        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keydown', handleKeyDown, true);
         document.removeEventListener('mousedown', handleSearchWindowMouseDown, true);
         document.body.removeEventListener('click', handleSearchWindowClick);
 
@@ -593,7 +652,6 @@
         <SearchBar
             ref="searchBar"
             :disabled="isWaitingForCompletion"
-            :attachments="attachments"
             @search="handleSearch"
             @submit="handleSubmit"
             @clear="handleClear"
