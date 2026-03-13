@@ -1,9 +1,22 @@
-﻿import type { Index } from '@services/AiService/attachments';
-import { native } from '@services/NativeService';
 import { popupManager } from '@services/PopupService';
-import { openPath, revealItemInDir } from '@tauri-apps/plugin-opener';
-import { type Ref, ref, watch } from 'vue';
+import { Editor } from '@tiptap/vue-3';
+import { type Ref, ref, shallowRef, watch } from 'vue';
 
+import {
+    type AttachmentTagAttrs,
+    clearEditor,
+    createSearchEditorExtensions,
+    findSearchTagChip,
+    getEditorText,
+    handleEditorClick,
+    insertAttachmentTag,
+    isBlankEditorAreaTarget,
+    isCursorAtDocStart,
+    isPlainText,
+    isSearchTagDomTarget,
+    removeAttachmentTag,
+    resolveMouseEventTarget,
+} from './tiptap';
 import { useDragging } from './useDragging';
 import { type ModelCapabilities, useModelSelection } from './useModelSelection';
 import { useQuickShortcuts } from './useQuickShortcuts';
@@ -14,16 +27,13 @@ interface UseSearchInputOptions {
     quickSearchEnabled: Ref<boolean>;
     emitSearch: (query: string) => void;
     emitModelChange: (capabilities: ModelCapabilities) => void;
-    emitRemoveAttachment: (id: string) => void;
+    emitRemoveAttachment: (id: string, fromEditor?: boolean) => void;
     emitDragStart: () => void;
     emitDragEnd: () => void;
 }
 
 export interface UseSearchInputDeps {
     hidePopup: () => Promise<void>;
-    hideSearchWindow: () => Promise<void>;
-    openPath: typeof openPath;
-    revealItemInDir: typeof revealItemInDir;
     createQuickShortcuts: typeof useQuickShortcuts;
     createModelSelection: typeof useModelSelection;
     createDragging: typeof useDragging;
@@ -31,9 +41,6 @@ export interface UseSearchInputDeps {
 
 const DEFAULT_DEPS: UseSearchInputDeps = {
     hidePopup: () => popupManager.hide(),
-    hideSearchWindow: () => native.window.hideSearchWindow(),
-    openPath,
-    revealItemInDir,
     createQuickShortcuts: useQuickShortcuts,
     createModelSelection: useModelSelection,
     createDragging: useDragging,
@@ -62,25 +69,71 @@ export function useSearchInput(
 
     // 1. 基础输入状态
     const searchQuery = ref('');
-    const searchInput = ref<HTMLInputElement | null>(null);
+    const editor = shallowRef<Editor | null>(null);
     const logoContainerRef = ref<HTMLElement | null>(null);
+    let cachedLineHeight = 0;
 
     // 2. 子能力组合
     // 顶层编排：快速搜索、模型选择、拖拽行为各自独立，组合在 search bar。
     const quickShortcuts = deps.createQuickShortcuts();
     const modelSelection = deps.createModelSelection({
         searchQuery,
-        searchInput,
+        editor,
         logoContainerRef,
         closeQuickSearchPanel: quickShortcuts.closeQuickSearchPanel,
     });
     const dragging = deps.createDragging({
-        searchInput,
+        editor,
         emitDragStart,
         emitDragEnd,
     });
 
-    // 3. 下拉态收敛
+    // 3. 编辑器创建
+    /**
+     * 初始化 Tiptap 编辑器实例。
+     * 在组件 onMounted 后调用。EditorContent 组件会自动处理 DOM 挂载。
+     */
+    function initEditor() {
+        const extensions = createSearchEditorExtensions({
+            placeholder: modelSelection.currentPlaceholder.value,
+            onModelTagRemoved: () => {
+                // 编辑器中 model tag 被删除时，仅同步状态，避免二次写编辑器
+                modelSelection.syncSelectedModelCleared();
+            },
+            onAttachmentTagRemoved: (attachmentId) => {
+                // 编辑器中 attachment tag 被删除时，仅同步外层状态，避免二次删节点
+                emitRemoveAttachment(attachmentId, true);
+            },
+        });
+
+        const ed = new Editor({
+            extensions,
+            autofocus: true,
+            editorProps: {
+                attributes: {
+                    class: 'tiptap',
+                },
+            },
+            onUpdate: ({ editor: updatedEditor }) => {
+                const text = getEditorText(updatedEditor);
+                searchQuery.value = text;
+                onInput();
+            },
+        });
+
+        editor.value = ed;
+    }
+
+    /**
+     * 销毁编辑器实例，释放资源。
+     */
+    function destroyEditor() {
+        editor.value?.destroy();
+        editor.value = null;
+        cachedLineHeight = 0;
+    }
+
+    // 4. 下拉态收敛
     /**
      * 判断任意下拉层是否处于打开状态。
      *
@@ -115,7 +168,7 @@ export function useSearchInput(
             quickShortcuts.closeQuickSearchPanel();
         }
     }
-    // 4. 状态同步监听
+    // 5. 状态同步监听
     watch(
         modelSelection.modelCapabilities,
         (capabilities) => {
@@ -123,6 +176,17 @@ export function useSearchInput(
         },
         { immediate: true }
     );
+
+    // 监听 placeholder 变化，动态更新编辑器
+    watch(modelSelection.currentPlaceholder, (newPlaceholder) => {
+        const ed = editor.value;
+        if (!ed) return;
+        // Tiptap Placeholder 扩展不支持运行时更新，通过 DOM 属性同步
+        const firstParagraph = ed.view.dom.querySelector('p.is-editor-empty');
+        if (firstParagraph) {
+            firstParagraph.setAttribute('data-placeholder', newPlaceholder);
+        }
+    });
 
     watch(
         searchQuery,
@@ -140,7 +204,7 @@ export function useSearchInput(
         { flush: 'post' }
     );
 
-    // 5. 输入与附件行为
+    // 6. 输入与附件行为
     /**
      * 处理输入变更：模型搜索、快速搜索、普通搜索三种路径分流。
      *
@@ -162,88 +226,177 @@ export function useSearchInput(
             return;
         }
 
-        // 快速搜索
+        // 快速搜索：输入即触发（单行纯文本时自动触发搜索，多行或含标签时不触发）
         const query = searchQuery.value.trim();
-        if (!query) {
+        const plainText = editor.value ? isPlainText(editor.value) : true;
+        if (!query || isMultiLine() || !plainText) {
             quickShortcuts.closeQuickSearchPanel();
-        } else if (quickShortcuts.isQuickSearchOpen.value) {
-            // 仅在面板已打开时更新搜索，避免输入时自动打开面板。
+        } else {
             quickShortcuts.triggerQuickSearch(searchQuery.value);
         }
 
         emitSearch(searchQuery.value);
     }
 
-    /**
-     * 请求删除指定附件。
-     *
-     * @param id 附件唯一标识。
-     * @returns void
-     */
-    function removeAttachment(id: string) {
-        emitRemoveAttachment(id);
-    }
-
-    /**
-     * 预览附件：图片直接打开，其他文件在目录中定位。
-     *
-     * @param attachment 待预览附件信息。
-     * @returns Promise<void>
-     */
-    async function previewAttachment(attachment: Index) {
-        try {
-            await deps.hideSearchWindow();
-            // 图片直接打开，其他文件定位到目录，更符合聊天附件预览预期。
-            if (attachment.type === 'image') {
-                await deps.openPath(attachment.path);
-            } else {
-                await deps.revealItemInDir(attachment.path);
-            }
-        } catch (error) {
-            console.error('[SearchBar] Failed to preview attachment:', error);
-        }
-    }
-
+    // 6. 清空与附件行为
     /**
      * 清空输入并关闭快速搜索面板。
      *
      * @returns void
      */
-    function clearInput() {
+    function clearInput(options?: { preserveModelTag?: boolean }) {
+        const ed = editor.value;
+        if (ed) {
+            clearEditor(ed, options);
+        }
         searchQuery.value = '';
-        // 清空输入时关闭联想面板，避免展示过期候选。
+        // 清空输入时同步关闭快速搜索面板。
         quickShortcuts.closeQuickSearchPanel();
     }
 
-    // 6. 输入焦点工具
+    // 7. 输入焦点工具
     /**
-     * 判断光标是否位于输入框起始位置。
+     * 判断光标是否位于编辑器起始位置。
      *
      * @returns 光标位于起始位置时为 true。
      */
     function isCursorAtStart(): boolean {
-        const input = searchInput.value;
-        if (!input) return false;
-        const start = input.selectionStart ?? 0;
-        const end = input.selectionEnd ?? start;
-        return start === 0 && end === 0;
+        const ed = editor.value;
+        if (!ed) return false;
+        return isCursorAtDocStart(ed);
     }
 
     /**
-     * 将焦点置于搜索输入框。
+     * 判断编辑器内容是否超过一行（包括文字换行和 Shift+Enter 换行）。
+     * 通过比较 DOM scrollHeight 与单行高度来判断，
+     * 乘以 1.5 倍作为阈值是因为单行 scrollHeight 恰好等于 lineHeight，
+     * 只有超出时才确认为多行。
+     */
+    function isMultiLine(): boolean {
+        const ed = editor.value;
+        if (!ed) return false;
+        if (!cachedLineHeight) {
+            cachedLineHeight = parseFloat(getComputedStyle(ed.view.dom).lineHeight) || 0;
+        }
+        if (!cachedLineHeight) return false;
+        return ed.view.dom.scrollHeight > cachedLineHeight * 1.5;
+    }
+
+    /**
+     * 将焦点置于搜索编辑器。
      *
      * @returns Promise<void>
      */
     async function focus() {
-        searchInput?.value?.focus();
+        const ed = editor.value;
+        if (!ed) return;
+
+        ed.commands.focus();
+    }
+
+    /**
+     * 编辑器 mousedown 预处理：标签元素上 preventDefault 阻止浏览器默认选区，
+     * 其余区域转发给拖拽模块判断是否启动窗口拖拽。
+     */
+    function handleEditorMouseDown(event: MouseEvent) {
+        const target = resolveMouseEventTarget(event);
+
+        if (target && isSearchTagDomTarget(target)) {
+            event.preventDefault();
+            return;
+        }
+
+        dragging.handleEditorMouseDown(event);
+    }
+
+    /**
+     * 处理编辑器内的点击事件。
+     * 职责链：拖拽吞噬 → 标签交互 → 空白区域聚焦 → 段落内光标定位。
+     * 使用 caretPositionFromPoint/caretRangeFromPoint 精确定位点击在段落末尾
+     * 之后的空白区域，此时将光标移至编辑器末尾。
+     */
+    function onEditorClick(event: MouseEvent) {
+        const ed = editor.value;
+        if (!ed) return;
+
+        if (dragging.consumeEditorClickAfterDrag()) {
+            return;
+        }
+
+        handleEditorClick(ed, event);
+
+        const target = resolveMouseEventTarget(event);
+
+        if (!target || event.target instanceof Text) return;
+        if (findSearchTagChip(target) || isSearchTagDomTarget(target)) {
+            return;
+        }
+
+        if (isBlankEditorAreaTarget(target)) {
+            ed.commands.focus('end');
+            return;
+        }
+
+        if (target.tagName !== 'P') {
+            return;
+        }
+
+        const ownerDocument = target.ownerDocument as Document & {
+            caretPositionFromPoint?: (
+                x: number,
+                y: number
+            ) => { offsetNode: Node; offset: number } | null;
+            caretRangeFromPoint?: (x: number, y: number) => Range | null;
+        };
+
+        let offsetNode: Node | null = null;
+        let offset = 0;
+
+        if (ownerDocument.caretPositionFromPoint) {
+            const caretPosition = ownerDocument.caretPositionFromPoint(
+                event.clientX,
+                event.clientY
+            );
+            offsetNode = caretPosition?.offsetNode ?? null;
+            offset = caretPosition?.offset ?? 0;
+        } else if (ownerDocument.caretRangeFromPoint) {
+            const caretRange = ownerDocument.caretRangeFromPoint(event.clientX, event.clientY);
+            offsetNode = caretRange?.startContainer ?? null;
+            offset = caretRange?.startOffset ?? 0;
+        }
+
+        if (offsetNode instanceof Text) {
+            return;
+        }
+
+        if (offsetNode === target && offset >= target.childNodes.length) {
+            ed.commands.focus('end');
+        }
+    }
+
+    /**
+     * 向编辑器中插入附件标签。
+     */
+    function addAttachmentTag(attrs: AttachmentTagAttrs) {
+        const ed = editor.value;
+        if (!ed) return;
+        insertAttachmentTag(ed, attrs);
+    }
+
+    /**
+     * 从编辑器中移除指定附件标签。
+     */
+    function removeAttachmentTagById(attachmentId: string) {
+        const ed = editor.value;
+        if (!ed) return;
+        removeAttachmentTag(ed, attachmentId);
     }
 
     return {
         searchQuery,
-        searchInput,
+        editor,
         logoContainerRef,
         quickSearchPanel: quickShortcuts.quickSearchPanel,
-        currentPlaceholder: modelSelection.currentPlaceholder,
         selectedModelId: modelSelection.selectedModelId,
         selectedModelName: modelSelection.selectedModelName,
         selectedProviderId: modelSelection.selectedProviderId,
@@ -261,14 +414,17 @@ export function useSearchInput(
         moveQuickSearchSelection: quickShortcuts.moveQuickSearchSelection,
         getHighlightedQuickShortcut: quickShortcuts.getHighlightedQuickShortcut,
         openHighlightedQuickShortcut: quickShortcuts.openHighlightedQuickShortcut,
-        onInput,
-        removeAttachment,
-        previewAttachment,
         clearInput,
         isCursorAtStart,
+        isMultiLine,
         focus,
         loadActiveModel: modelSelection.loadActiveModel,
         handleContainerMouseDown: dragging.handleContainerMouseDown,
-        handleInputMouseDown: dragging.handleInputMouseDown,
+        handleEditorMouseDown,
+        initEditor,
+        destroyEditor,
+        onEditorClick,
+        addAttachmentTag,
+        removeAttachmentTagById,
     };
 }
