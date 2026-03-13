@@ -183,13 +183,9 @@ function useQuickSearchFlow(
             itemRefs.value = [];
             // 新结果到达后重置资源加载状态，避免沿用上一次查询的加载队列。
             resetLoadingState();
-            highlightedIndex.value = 0;
+            highlightedIndex.value = -1;
             setVisibleRows(COLLAPSED_VISIBLE_ROWS);
             await syncLayout();
-            highlightedIndex.value = Math.min(
-                highlightedIndex.value,
-                Math.max(results.value.length - 1, 0)
-            );
             scheduleIconLoad(reqId, false);
             scheduleImageLoad(reqId, false);
         } catch (error) {
@@ -329,14 +325,16 @@ function useQuickSearchFlow(
     }
 
     /**
-     * 面板已打开时触发增量查询。
+     * 触发搜索查询，无论面板是否打开。
+     * 不依赖面板 prop 中的 searchQuery（该值因 Vue 渲染批处理可能滞后），
+     * 而是由调用方直接传入最新查询文本。
+     * 查询到结果后面板会通过 executeSearch 自动打开。
      *
      * @param query 查询文本。
      * @returns void
      */
-    // 面板已打开时，输入变化通过防抖触发增量搜索。
     function triggerSearch(query: string) {
-        if (!isOpen.value) return;
+        if (!enabled.value) return;
 
         const trimmed = query.trim();
         if (!trimmed) {
@@ -387,7 +385,7 @@ export function useQuickSearchLogic(
     // 1. 基础状态
     const isOpen = ref(false);
     const results = ref<QuickShortcutItem[]>([]);
-    const highlightedIndex = ref(0);
+    const highlightedIndex = ref(-1);
     const itemRefs = ref<HTMLElement[]>([]);
     const scrollRef = ref<HTMLElement | null>(null);
     const requestId = ref(0);
@@ -421,7 +419,7 @@ export function useQuickSearchLogic(
      */
     function resetResultState() {
         results.value = [];
-        highlightedIndex.value = 0;
+        highlightedIndex.value = -1;
         itemRefs.value = [];
         layout.resetLayoutState();
     }
@@ -503,11 +501,11 @@ export function useQuickSearchLogic(
         results,
         (items) => {
             if (items.length === 0) {
-                highlightedIndex.value = 0;
+                highlightedIndex.value = -1;
                 return;
             }
 
-            highlightedIndex.value = 0;
+            highlightedIndex.value = -1;
             void nextTick(() => {
                 if (scrollRef.value) {
                     scrollRef.value.scrollTop = 0;

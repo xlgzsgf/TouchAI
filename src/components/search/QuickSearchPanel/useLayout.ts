@@ -163,6 +163,7 @@ export function useLayout(options: UseLayoutOptions) {
      */
     async function scrollHighlightedIntoView() {
         await nextTick();
+        if (highlightedIndex.value < 0) return;
         const scrollContainer = scrollRef.value;
         if (!scrollContainer) return;
 
@@ -195,6 +196,9 @@ export function useLayout(options: UseLayoutOptions) {
 
     /**
      * 按方向移动高亮项，并在必要时展开更多可见行。
+     * highlightedIndex 为 -1 表示"无高亮"状态：
+     * - down 从 -1 激活首项；left/right/up 在 -1 时忽略（不消费事件）。
+     * - up 从第一排返回 -1，实现"去激活"语义。
      *
      * @param direction 高亮移动方向。
      * @returns void
@@ -205,35 +209,50 @@ export function useLayout(options: UseLayoutOptions) {
         const maxIndex = results.value.length - 1;
         const activeColumns = Math.max(gridColumns.value, 1);
         const currentIndex = highlightedIndex.value;
-        const currentRow = Math.floor(currentIndex / activeColumns);
         let nextIndex = currentIndex;
 
         switch (direction) {
             case 'left':
+                if (currentIndex < 0) return; // 无高亮时忽略
                 nextIndex = Math.max(nextIndex - 1, 0);
                 break;
             case 'right':
+                if (currentIndex < 0) return; // 无高亮时忽略
                 nextIndex = Math.min(nextIndex + 1, maxIndex);
                 break;
             case 'up':
-                nextIndex = Math.max(nextIndex - activeColumns, 0);
+                if (currentIndex < 0) return; // 无高亮时忽略
+                if (currentIndex < activeColumns) {
+                    // 第一排向上 → 去激活高亮
+                    nextIndex = -1;
+                } else {
+                    nextIndex = Math.max(nextIndex - activeColumns, 0);
+                }
                 break;
             case 'down':
-                nextIndex = Math.min(nextIndex + activeColumns, maxIndex);
-                if (
-                    visibleRows.value === COLLAPSED_VISIBLE_ROWS &&
-                    currentRow >= COLLAPSED_VISIBLE_ROWS - 1 &&
-                    nextIndex > currentIndex
-                ) {
-                    // 向下越过折叠区域时自动扩展行数，减少键盘操作阻断感。
-                    setVisibleRows(EXPANDED_VISIBLE_ROWS);
-                    updateLayout();
+                if (currentIndex < 0) {
+                    // 无高亮 → 激活首项
+                    nextIndex = 0;
+                } else {
+                    const currentRow = Math.floor(currentIndex / activeColumns);
+                    nextIndex = Math.min(nextIndex + activeColumns, maxIndex);
+                    if (
+                        visibleRows.value === COLLAPSED_VISIBLE_ROWS &&
+                        currentRow >= COLLAPSED_VISIBLE_ROWS - 1 &&
+                        nextIndex > currentIndex
+                    ) {
+                        // 向下越过折叠区域时自动扩展行数，减少键盘操作阻断感。
+                        setVisibleRows(EXPANDED_VISIBLE_ROWS);
+                        updateLayout();
+                    }
                 }
                 break;
         }
 
         highlightedIndex.value = nextIndex;
-        void scrollHighlightedIntoView();
+        if (nextIndex >= 0) {
+            void scrollHighlightedIntoView();
+        }
     }
 
     return {
