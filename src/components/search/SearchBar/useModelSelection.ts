@@ -2,7 +2,16 @@ import { findModelsWithProvider } from '@database/queries';
 import type { ModelWithProvider } from '@database/queries/models';
 import { aiService } from '@services/AiService';
 import { type ModelDropdownPopupItem, popupManager } from '@services/PopupService';
-import { computed, onMounted, onUnmounted, type Ref, ref } from 'vue';
+import type { Editor, JSONContent } from '@tiptap/core';
+import { computed, onMounted, onUnmounted, type Ref, ref, type ShallowRef } from 'vue';
+
+import {
+    DEFAULT_PLACEHOLDER,
+    getEditorJSON,
+    insertModelTag,
+    removeModelTag,
+    setEditorJSON,
+} from './tiptap';
 
 export interface ModelCapabilities {
     supportsImages: boolean;
@@ -11,7 +20,7 @@ export interface ModelCapabilities {
 
 interface UseModelSelectionOptions {
     searchQuery: Ref<string>;
-    searchInput: Ref<HTMLInputElement | null>;
+    editor: ShallowRef<Editor | null>;
     logoContainerRef: Ref<HTMLElement | null>;
     closeQuickSearchPanel: () => void;
 }
@@ -40,19 +49,17 @@ export function useModelSelection(
     options: UseModelSelectionOptions,
     deps: UseModelSelectionDeps = DEFAULT_DEPS
 ) {
-    const { searchQuery, searchInput, logoContainerRef, closeQuickSearchPanel } = options;
-    const placeholder = '写下你的需求...';
+    const { searchQuery, editor, logoContainerRef, closeQuickSearchPanel } = options;
 
     // 1. 搜索上下文缓存
     // 保存打开下拉框前的状态
-    const savedSearchQuery = ref('');
-    const savedCursorPosition = ref(0);
+    const savedEditorJSON = ref<JSONContent | null>(null);
     const isSearchingModel = ref(false);
 
     // 2. 占位提示与模型状态
     // 动态占位提示
     const currentPlaceholder = computed(() => {
-        return isSearchingModel.value ? '请输入模型名称或ID' : placeholder;
+        return isSearchingModel.value ? '请输入模型名称或ID' : DEFAULT_PLACEHOLDER;
     });
 
     // 模型选择状态
@@ -62,6 +69,8 @@ export function useModelSelection(
     const activeModel = ref<ModelWithProvider | null>(null);
     const selectedModel = ref<ModelWithProvider | null>(null);
     const popupModels = ref<ModelDropdownPopupItem[]>([]);
+    // 缓存原始模型列表，供 handleModelSelect 使用，避免重复查询数据库。
+    let cachedRawModels: ModelWithProvider[] = [];
     const isModelDropdownOpen = ref(false);
     const dropdownSearchQuery = ref('');
     const isPopupOpen = computed(() => deps.popup.state.isOpen);
@@ -99,9 +108,11 @@ export function useModelSelection(
     async function loadPopupModels() {
         try {
             const models = await deps.findModels();
+            cachedRawModels = models;
             popupModels.value = models.filter((m) => m.provider_enabled === 1).map(mapPopupModel);
         } catch (error) {
             console.error('[SearchBar] Failed to load popup models:', error);
+            cachedRawModels = [];
             popupModels.value = [];
         }
     }
@@ -111,22 +122,22 @@ export function useModelSelection(
 
     // 4. 输入状态恢复与下拉状态收敛
     /**
-     * 退出模型搜索模式时，恢复原输入内容与光标位置。
+     * 退出模型搜索模式时，恢复原输入内容。
      *
      * @returns void
      */
     function restoreSearchState() {
         if (isSearchingModel.value) {
-            searchQuery.value = savedSearchQuery.value;
+            const ed = editor.value;
+            if (ed && savedEditorJSON.value) {
+                setEditorJSON(ed, savedEditorJSON.value);
+            } else {
+                searchQuery.value = '';
+            }
             isSearchingModel.value = false;
+            savedEditorJSON.value = null;
             setTimeout(() => {
-                if (searchInput.value) {
-                    searchInput.value.setSelectionRange(
-                        savedCursorPosition.value,
-                        savedCursorPosition.value
-                    );
-                    searchInput.value.focus();
-                }
+                editor.value?.commands.focus('end');
             }, 0);
         }
     }
@@ -141,6 +152,25 @@ export function useModelSelection(
         isModelDropdownOpen.value = false;
         dropdownSearchQuery.value = '';
         restoreSearchState();
+    }
+
+    /**
+     * 进入模型搜索模式：保存编辑器内容、清空输入、切换状态。
+     */
+    function enterModelSearchMode() {
+        const ed = editor.value;
+        if (ed) {
+            savedEditorJSON.value = getEditorJSON(ed);
+            ed.commands.clearContent(true);
+        }
+        searchQuery.value = '';
+        isSearchingModel.value = true;
+        dropdownSearchQuery.value = '';
+        isModelDropdownOpen.value = true;
+
+        setTimeout(() => {
+            editor.value?.commands.focus();
+        }, 100);
     }
 
     // 5. 下拉开关与模型选择
@@ -171,17 +201,7 @@ export function useModelSelection(
             });
 
             if (!wasOpen) {
-                // 进入“模型搜索模式”前先保存用户原查询与光标。
-                savedSearchQuery.value = searchQuery.value;
-                savedCursorPosition.value = searchInput.value?.selectionStart || 0;
-                searchQuery.value = '';
-                isSearchingModel.value = true;
-                dropdownSearchQuery.value = '';
-                isModelDropdownOpen.value = true;
-
-                setTimeout(() => {
-                    searchInput.value?.focus();
-                }, 100);
+                enterModelSearchMode();
             } else {
                 resetModelDropdownState();
             }
@@ -217,13 +237,7 @@ export function useModelSelection(
         closeQuickSearchPanel();
         await loadPopupModels();
 
-        // 与 toggle 的打开分支保持一致，确保外部直接调用行为相同。
-        savedSearchQuery.value = searchQuery.value;
-        savedCursorPosition.value = searchInput.value?.selectionStart || 0;
-        searchQuery.value = '';
-        isSearchingModel.value = true;
-        dropdownSearchQuery.value = '';
-        isModelDropdownOpen.value = true;
+        enterModelSearchMode();
 
         try {
             await deps.popup.toggle('model-dropdown-popup', logoContainerRef.value, {
@@ -238,24 +252,19 @@ export function useModelSelection(
             console.error('[SearchBar] Failed to open popup:', error);
             resetModelDropdownState();
         }
-
-        setTimeout(() => {
-            searchInput.value?.focus();
-        }, 100);
     }
 
     /**
-     * 处理模型选择，支持“再次选择默认模型=取消覆盖”逻辑。
+     * 处理模型选择，支持"再次选择默认模型=取消覆盖"逻辑。
      *
      * @param modelDbId 模型数据库主键 ID。
      * @returns Promise<void>
      */
     async function handleModelSelect(modelDbId: number) {
         try {
-            const models = await deps.findModels();
-            const model = models.find((m) => m.id === modelDbId);
+            const model = cachedRawModels.find((m) => m.id === modelDbId);
             if (model) {
-                // 再次选择当前默认模型视为“取消覆盖”，恢复跟随全局模型。
+                // 再次选择当前默认模型视为"取消覆盖"，恢复跟随全局模型。
                 const isDefaultModel =
                     model.model_id === activeModel.value?.model_id &&
                     model.provider_id === activeModel.value?.provider_id;
@@ -272,13 +281,28 @@ export function useModelSelection(
             console.error('[SearchBar] Failed to select model:', error);
         }
 
-        // 先恢复搜索状态，再关闭下拉框
+        // 先恢复搜索状态（还原编辑器内容到打开下拉前的快照）
         if (isSearchingModel.value) {
-            searchQuery.value = savedSearchQuery.value;
+            const ed = editor.value;
+            if (ed && savedEditorJSON.value) {
+                setEditorJSON(ed, savedEditorJSON.value);
+                savedEditorJSON.value = null;
+            }
         }
 
         // 关闭下拉框
+        isSearchingModel.value = false;
         await closeModelDropdown();
+
+        // 恢复内容后再插入 model tag，确保 tag 不会被 setEditorJSON 覆盖。
+        const ed = editor.value;
+        if (ed && selectedModelId.value && selectedModelName.value) {
+            insertModelTag(ed, {
+                modelId: selectedModelId.value,
+                modelName: selectedModelName.value,
+                providerId: selectedProviderId.value,
+            });
+        }
     }
 
     /**
@@ -286,11 +310,33 @@ export function useModelSelection(
      *
      * @returns void
      */
-    function clearSelectedModel() {
+    /**
+     * 仅清除模型选择状态（不操作编辑器节点）。
+     * 由编辑器 NodeSync 回调调用——当用户在编辑器中删除 model tag 时，
+     * 标签已不存在，只需同步组件状态，避免二次写编辑器。
+     *
+     * @returns void
+     */
+    function syncSelectedModelCleared() {
         selectedModel.value = null;
         selectedModelId.value = null;
         selectedModelName.value = null;
         selectedProviderId.value = null;
+    }
+
+    /**
+     * 清除模型选择状态，并同步移除编辑器中的 model tag 标签。
+     *
+     * @returns void
+     */
+    function clearSelectedModel() {
+        syncSelectedModelCleared();
+
+        // Also remove the model tag chip from editor
+        const ed = editor.value;
+        if (ed) {
+            removeModelTag(ed);
+        }
     }
 
     // 6. 模型能力计算
@@ -378,6 +424,7 @@ export function useModelSelection(
         closeModelDropdown,
         openModelDropdown,
         clearSelectedModel,
+        syncSelectedModelCleared,
         updateDropdownSearchQuery,
         restoreSearchState,
         resetModelDropdownState,
