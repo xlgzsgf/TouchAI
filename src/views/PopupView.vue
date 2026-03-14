@@ -35,7 +35,7 @@
     popupType.value = type;
 
     const config = type ? popupRegistry.get(type) : null;
-    const { invalidate } = useWindowResize({
+    const { invalidate, cancelPendingShow } = useWindowResize({
         target: popupContainer,
         maxHeight: config?.height,
         minHeight: config?.minHeight,
@@ -50,7 +50,21 @@
                 if (event.payload.windowLabel !== currentLabel) return;
                 popupType.value = event.payload.type;
                 popupData.value = event.payload.data;
-                invalidate();
+                // 仅在弹窗首次展示（isShow）时 invalidate，触发 resize → show 流程。
+                // 纯数据更新（如搜索过滤）由 ResizeObserver 自行处理高度变化，
+                // 避免 updateData 的 popup-data 事件与 popup-closed 竞态
+                // 导致已关闭的弹窗被 pendingShow 重新显示。
+                if (event.payload.isShow) {
+                    invalidate();
+                }
+            })
+        );
+
+        // 监听关闭事件：取消待执行的 show，防止 invalidate 触发的异步 resize
+        // 在窗口隐藏后才完成，导致 pendingShow 重新将窗口显示出来。
+        unlisteners.push(
+            await listen('popup-closed', () => {
+                cancelPendingShow();
             })
         );
 

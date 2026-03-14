@@ -1,5 +1,6 @@
 // Copyright (c) 2026. Qian Cheng. Licensed under GPL v3
 
+import type { AttachmentSupportStatus } from '@services/AiService/attachments';
 import type { Component } from 'vue';
 
 /**
@@ -107,7 +108,7 @@ export interface AttachmentListData {
         size?: number;
         preview?: string;
         mimeType?: string;
-        supportStatus?: 'supported' | 'unsupported-image' | 'unsupported-file';
+        supportStatus?: AttachmentSupportStatus;
     }>;
 }
 
@@ -132,6 +133,10 @@ export interface PopupDataPayload {
     type: PopupType;
     data: PopupData;
     windowLabel?: string;
+    /** true 表示弹窗首次展示（来自 show()），缺省/false 表示纯数据更新（来自 updateData()）。
+     *  PopupView 仅在 isShow 时触发 invalidate → pendingShow，
+     *  避免 updateData 的跨窗口事件与 popup-closed 竞态导致已关闭弹窗被重新显示。 */
+    isShow?: boolean;
 }
 
 /**
