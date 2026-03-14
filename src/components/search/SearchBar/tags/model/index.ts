@@ -60,24 +60,29 @@ const ModelTagNode = createSearchTagNode({
 
 /**
  * 读取编辑器中的模型标签属性。
- * 模型标签固定在 position 1，直接定位读取，无需遍历文档。
+ * 通过遍历文档查找模型标签节点，避免依赖固定位置假设。
  */
 export function getModelTag(editor: Editor): ModelTagAttrs | null {
-    const node = editor.state.doc.nodeAt(1);
-    if (node && node.type.name === MODEL_TAG_NODE) {
-        return {
-            modelId: node.attrs.modelId,
-            modelName: node.attrs.modelName,
-            providerId: node.attrs.providerId,
-        };
-    }
-    return null;
+    let result: ModelTagAttrs | null = null;
+    editor.state.doc.descendants((node) => {
+        if (node.type.name === MODEL_TAG_NODE) {
+            result = {
+                modelId: node.attrs.modelId,
+                modelName: node.attrs.modelName,
+                providerId: node.attrs.providerId,
+            };
+            return false; // 找到后停止遍历
+        }
+        return true;
+    });
+    return result;
 }
 
 /**
  * 插入模型标签（若已有则原子替换）。
  * 在同一 ProseMirror 事务中执行「删旧 + 插新」，
  * 避免 NodeSync 在中间状态检测到"标签被移除"而误清选择状态。
+ * 新标签始终插入到文档开头（position 1）。
  */
 export function insertModelTag(editor: Editor, attrs: ModelTagAttrs) {
     editor
@@ -86,9 +91,19 @@ export function insertModelTag(editor: Editor, attrs: ModelTagAttrs) {
         .command(({ tr, state }: { tr: Transaction; state: EditorState }) => {
             // 在同一事务中移除旧标签并插入新标签，
             // 避免 NodeSync 在中间状态检测到"标签被移除"而误清除选择状态。
-            const existingNode = state.doc.nodeAt(1);
-            if (existingNode && existingNode.type.name === MODEL_TAG_NODE) {
-                tr.delete(1, 1 + existingNode.nodeSize);
+            let existingPos: number | null = null;
+            let existingSize = 0;
+            state.doc.descendants((node, pos) => {
+                if (node.type.name === MODEL_TAG_NODE && existingPos === null) {
+                    existingPos = pos;
+                    existingSize = node.nodeSize;
+                    return false; // 找到后停止遍历
+                }
+                return true;
+            });
+
+            if (existingPos !== null) {
+                tr.delete(existingPos, existingPos + existingSize);
             }
 
             const modelTagType = state.schema.nodes.modelTag;
@@ -102,15 +117,19 @@ export function insertModelTag(editor: Editor, attrs: ModelTagAttrs) {
         .run();
 }
 
-/** 移除编辑器中的模型标签。直接定位 position 1 删除，O(1) 不需遍历。 */
+/** 移除编辑器中的模型标签。通过遍历文档查找并删除第一个匹配的模型标签。 */
 export function removeModelTag(editor: Editor) {
     editor.commands.command(({ tr, state }: { tr: Transaction; state: EditorState }) => {
-        const node = state.doc.nodeAt(1);
-        if (node && node.type.name === MODEL_TAG_NODE) {
-            tr.delete(1, 1 + node.nodeSize);
+        let found = false;
+        state.doc.descendants((node, pos) => {
+            if (node.type.name === MODEL_TAG_NODE && !found) {
+                tr.delete(pos, pos + node.nodeSize);
+                found = true;
+                return false; // 停止遍历
+            }
             return true;
-        }
-        return false;
+        });
+        return found;
     });
 }
 
