@@ -76,10 +76,14 @@ class PopupManager {
             });
 
             const windowLabel = `popup-${type}`;
+            // isShow: true 标记此事件为弹窗首次展示，PopupView 仅在此时触发
+            // invalidate → pendingShow → resize → show 流程。
+            // 后续 updateData 发送的 popup-data 不带此标记，避免与 popup-closed 竞态。
             await emit('popup-data', {
                 type,
                 data,
                 windowLabel,
+                isShow: true,
             } as PopupDataPayload);
 
             this.isOpen = true;

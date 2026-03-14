@@ -102,5 +102,9 @@ export function useWindowResize(options: WindowResizeOptions) {
 
     onUnmounted(cleanup);
 
-    return { currentHeight, invalidate };
+    return {
+        currentHeight,
+        invalidate,
+        cancelPendingShow: () => (pendingShow = false),
+    };
 }
