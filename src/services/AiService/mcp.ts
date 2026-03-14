@@ -33,6 +33,26 @@ import type { AiToolDefinition } from './types';
  */
 class McpManager {
     private statusCache: Map<number, McpServerStatus> = new Map();
+    private errorCache: Map<number, string | null> = new Map();
+
+    /**
+     * 将错误消息标准化为一致的字符串格式
+     * 处理 Error 对象和原始错误值，确保始终有可显示的错误消息
+     */
+    private normalizeErrorMessage(error: unknown): string {
+        return error instanceof Error ? error.message : String(error);
+    }
+
+    private async persistServerError(serverId: number, error: string | null): Promise<void> {
+        try {
+            await updateMcpServer(serverId, { last_error: error });
+        } catch (persistError) {
+            console.error(
+                `[McpManager] Failed to persist error for server ${serverId}:`,
+                persistError
+            );
+        }
+    }
 
     /**
      * 自动连接所有已启用的服务器
@@ -48,7 +68,8 @@ class McpManager {
                 enabledServers.map((server) => `${server.name}(id: ${server.id})`).join(',')
             );
 
-            // 逐个连接服务器，避免并发写数据库导致 "database is locked"
+            // 逐个连接服务器以避免 SQLite "database is locked" 错误
+            // 并行连接会导致并发写入数据库（更新状态、同步工具），SQLite 无法安全处理
             for (const server of enabledServers) {
                 try {
                     await this.connectServer(server);
@@ -88,7 +109,8 @@ class McpManager {
             });
 
             // 更新状态为已连接
-            this.updateStatus(server.id, 'connected');
+            this.updateStatus(server.id, 'connected', null);
+            await this.persistServerError(server.id, null);
 
             console.log(`[McpManager] Successfully connected to ${server.name}`);
 
@@ -107,7 +129,9 @@ class McpManager {
             await this.syncToolsToDatabase(server.id);
         } catch (error) {
             console.error(`[McpManager] Failed to connect to ${server.name}:`, error);
-            this.updateStatus(server.id, 'error');
+            const errorMessage = this.normalizeErrorMessage(error);
+            this.updateStatus(server.id, 'error', errorMessage);
+            await this.persistServerError(server.id, errorMessage);
             throw error;
         }
     }
@@ -123,16 +147,19 @@ class McpManager {
             const tools = await this.listTools(serverId);
 
             const existingTools = await findMcpToolsByServerId(serverId);
+            // 保留用户对现有工具的启用/禁用偏好
+            // 当服务器重新连接时，我们希望保持用户之前启用或禁用的工具状态，而不是全部重置为启用
             const existingEnabledByName = new Map(
                 existingTools.map((tool) => [tool.name, tool.enabled])
             );
 
             const drizzle = db.getDb();
 
-            // 删除旧的工具列表
+            // 先删除旧工具列表，然后插入服务器返回的新列表
+            // 这样可以处理从服务器中移除的工具
             await deleteMcpToolsByServerId(serverId);
 
-            // 批量插入新的工具列表
+            // 批量插入新工具列表，保留已有的启用状态
             if (tools.length > 0) {
                 await drizzle
                     .insert(mcpTools)
@@ -162,7 +189,8 @@ class McpManager {
 
         try {
             await mcp.disconnectServer(serverId);
-            this.updateStatus(serverId, 'disconnected');
+            this.updateStatus(serverId, 'disconnected', null);
+            await this.persistServerError(serverId, null);
             console.log(`[McpManager] Successfully disconnected server ${serverId}`);
         } catch (error) {
             console.error(`[McpManager] Failed to disconnect server ${serverId}:`, error);
@@ -227,11 +255,16 @@ class McpManager {
         return this.statusCache.get(serverId) || 'disconnected';
     }
 
+    getServerError(serverId: number): string | null {
+        return this.errorCache.get(serverId) ?? null;
+    }
+
     /**
      * 从外部更新状态缓存（用于跨窗口事件同步）
      */
-    setStatusFromEvent(serverId: number, status: McpServerStatus): void {
+    setStatusFromEvent(serverId: number, status: McpServerStatus, error?: string | null): void {
         this.statusCache.set(serverId, status);
+        this.errorCache.set(serverId, error ?? null);
     }
 
     /**
@@ -240,7 +273,7 @@ class McpManager {
     async refreshServerStatus(serverId: number): Promise<McpServerStatus> {
         try {
             const statusInfo = await mcp.getServerStatus(serverId);
-            this.updateStatus(serverId, statusInfo.status);
+            this.updateStatus(serverId, statusInfo.status, statusInfo.error ?? null);
             return statusInfo.status;
         } catch (error) {
             console.error(`[McpManager] Failed to refresh status for server ${serverId}:`, error);
@@ -255,7 +288,11 @@ class McpManager {
         try {
             const statuses = await mcp.getAllServerStatuses();
             for (const statusInfo of statuses) {
-                this.updateStatus(statusInfo.server_id, statusInfo.status);
+                this.updateStatus(
+                    statusInfo.server_id,
+                    statusInfo.status,
+                    statusInfo.error ?? null
+                );
             }
         } catch (error) {
             console.error('[McpManager] Failed to refresh all server statuses:', error);
@@ -368,7 +405,8 @@ class McpManager {
     }
 
     /**
-     * 执行工具调用
+     * 执行工具调用，支持超时和取消
+     * 处理工具名称解析、超时竞争和响应格式化
      */
     async executeTool(
         toolName: string,
@@ -379,7 +417,7 @@ class McpManager {
             resolved?: { serverId: number; originalName: string; toolTimeout: number };
         }
     ): Promise<{ result: string; isError: boolean }> {
-        // 执行前检查是否已取消
+        // 如果请求已被取消，立即返回，避免消耗
         if (options?.signal?.aborted) {
             return { result: 'Request cancelled', isError: true };
         }
@@ -419,15 +457,14 @@ class McpManager {
     }
 
     /**
-     * Race a promise against a timeout and an optional AbortSignal.
-     * 所有 racer 在主 promise settle 后都会被清理，避免 Promise 泄漏。
+     * 让 promise 与超时和可选的 AbortSignal 竞争
      */
     private raceWithTimeoutAndSignal<T>(
         promise: Promise<T>,
         timeoutMs: number,
         signal?: AbortSignal
     ): Promise<T> {
-        // 无超时且无有效信号时直接返回原 promise
+        // 快速路径：没有超时且没有有效信号，直接返回原始 promise
         if (timeoutMs <= 0 && (!signal || signal.aborted)) {
             return promise;
         }
@@ -435,6 +472,7 @@ class McpManager {
         return new Promise<T>((resolve, reject) => {
             let settled = false;
 
+            // 确保只有第一个完成者获胜，且清理只发生一次
             const settle = (fn: typeof resolve | typeof reject, value: T | Error) => {
                 if (settled) return;
                 settled = true;
@@ -445,18 +483,19 @@ class McpManager {
             let timer: ReturnType<typeof setTimeout> | undefined;
             const onAbort = () => settle(reject, new Error('Request cancelled'));
 
+            // 清理所有竞争资源：定时器和中止监听器
             const cleanup = () => {
                 if (timer !== undefined) clearTimeout(timer);
                 signal?.removeEventListener('abort', onAbort);
             };
 
-            // 主 promise
+            // 主 promise 竞争者
             promise.then(
                 (value) => settle(resolve, value),
                 (error) => settle(reject, error)
             );
 
-            // 超时竞争者
+            // 超时竞争者：如果工具执行时间过长则拒绝
             if (timeoutMs > 0) {
                 timer = setTimeout(
                     () =>
@@ -465,7 +504,7 @@ class McpManager {
                 );
             }
 
-            // 中止信号竞争者
+            // 中止信号竞争者：如果用户取消请求则拒绝
             if (signal && !signal.aborted) {
                 signal.addEventListener('abort', onAbort, { once: true });
             } else if (signal?.aborted) {
@@ -477,11 +516,17 @@ class McpManager {
     /**
      * 更新状态并发送事件
      */
-    private updateStatus(serverId: number, status: McpServerStatus): void {
+    private updateStatus(
+        serverId: number,
+        status: McpServerStatus,
+        error: string | null = null
+    ): void {
         this.statusCache.set(serverId, status);
+        this.errorCache.set(serverId, error);
         eventService.emit(AppEvent.MCP_STATUS, {
             serverId,
             status,
+            error: error ?? undefined,
         });
     }
 }

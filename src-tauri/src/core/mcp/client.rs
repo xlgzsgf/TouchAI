@@ -12,8 +12,15 @@ use rmcp::{
     },
 };
 use std::collections::HashMap;
+use std::process::Stdio;
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::{
+    io::AsyncReadExt,
+    process::ChildStderr,
+    sync::{Mutex, RwLock},
+    task::JoinHandle,
+    time::{timeout, Duration},
+};
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -57,9 +64,11 @@ impl McpClient {
         self.set_status(ServerStatus::Connecting).await;
         self.clear_error().await;
 
-        // 在 Windows 上通过 cmd.exe 包装命令，以支持 PATH 查找
-        // （如 npx、node、python 等）。对于绝对路径会多一层 shell，
-        // 但开销可忽略，且简化了处理逻辑。
+        // 在 Windows 上通过 cmd.exe 包装命令以支持 PATH 查找
+        // 这是必要的，因为 tokio::process::Command 在 Windows 上不会搜索 PATH
+        // 来查找 npx、node、python 等可执行文件
+        //
+        // 权衡：绝对路径会多一层 shell，但开销可忽略，且这大大简化了逻辑
         let (actual_command, actual_args) = if cfg!(target_os = "windows") {
             let mut cmd_args = vec!["/c".to_string(), command.clone()];
             cmd_args.extend(args);
@@ -78,6 +87,8 @@ impl McpClient {
             c.args(&actual_args);
 
             // 在 Windows 上隐藏子进程的控制台窗口
+            // 如果没有这个标志，MCP 服务器进程会生成可见的控制台窗口
+            // 这对于 GUI 应用程序来说是不希望的
             #[cfg(target_os = "windows")]
             c.creation_flags(CREATE_NO_WINDOW);
 
@@ -94,18 +105,24 @@ impl McpClient {
             }
         });
 
-        // 从命令创建传输
-        let transport = TokioChildProcess::new(cmd).map_err(|e| {
-            let err_msg = format!("Failed to create transport: {}", e);
-            error!("{}", err_msg);
-            err_msg
-        })?;
+        // Capture process stderr during connect
+        let (transport, stderr) = TokioChildProcess::builder(cmd)
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| {
+                let err_msg = format!("Failed to create transport: {}", e);
+                error!("{}", err_msg);
+                err_msg
+            })?;
 
-        self.store_service_and_set_connected(
+        let stderr_collector = Self::spawn_stderr_collector(stderr);
+        let result = Self::format_stdio_connect_result(
             ().serve(transport).await.map_err(|e| e.to_string()),
-            "stdio",
+            stderr_collector,
         )
-        .await
+        .await;
+
+        self.store_service_and_set_connected(result, "stdio").await
     }
 
     /// 通过 SSE 传输连接到 MCP 服务器。
@@ -177,6 +194,113 @@ impl McpClient {
         .await
     }
 
+    /// 生成后台任务以收集 MCP 服务器进程的 stderr 输出
+    ///
+    /// 为什么需要这个：当 MCP 服务器连接失败时，SDK 的错误消息通常很笼统
+    /// 实际的错误详情通常由服务器进程打印到 stderr
+    /// 通过捕获 stderr，我们可以为用户提供更有帮助的错误消息
+    ///
+    /// 32KB 限制可防止服务器大量输出 stderr 导致的内存耗尽
+    fn spawn_stderr_collector(
+        stderr: Option<ChildStderr>,
+    ) -> Option<(Arc<Mutex<Vec<u8>>>, JoinHandle<std::io::Result<()>>)> {
+        const MAX_CAPTURED_STDERR_BYTES: usize = 32 * 1024;
+
+        stderr.map(|mut stderr| {
+            let output = Arc::new(Mutex::new(Vec::new()));
+            let output_clone = Arc::clone(&output);
+
+            let task = tokio::spawn(async move {
+                let mut buffer = [0u8; 4096];
+                loop {
+                    let bytes_read = stderr.read(&mut buffer).await?;
+                    if bytes_read == 0 {
+                        break;
+                    }
+
+                    let mut stderr_output = output_clone.lock().await;
+                    // 达到限制后停止收集以防止内存问题
+                    if stderr_output.len() >= MAX_CAPTURED_STDERR_BYTES {
+                        continue;
+                    }
+
+                    let remaining = MAX_CAPTURED_STDERR_BYTES - stderr_output.len();
+                    stderr_output.extend_from_slice(&buffer[..bytes_read.min(remaining)]);
+                }
+
+                Ok(())
+            });
+
+            (output, task)
+        })
+    }
+
+    async fn format_stdio_connect_result(
+        result: Result<McpService, String>,
+        stderr_collector: Option<(Arc<Mutex<Vec<u8>>>, JoinHandle<std::io::Result<()>>)>,
+    ) -> Result<McpService, String> {
+        match result {
+            Ok(service) => {
+                if let Some((_output, task)) = stderr_collector {
+                    drop(task);
+                }
+                Ok(service)
+            }
+            Err(error_message) => {
+                let stderr_output = Self::collect_stderr_output(stderr_collector).await;
+                Err(Self::merge_stdio_error(stderr_output, error_message))
+            }
+        }
+    }
+
+    /// 带超时地收集 stderr 输出
+    ///
+    /// 连接失败后，我们给 stderr 收集任务 300ms 的时间来完成读取
+    /// 这通常足够捕获错误消息，但可以防止进程卡住时无限期挂起
+    async fn collect_stderr_output(
+        stderr_collector: Option<(Arc<Mutex<Vec<u8>>>, JoinHandle<std::io::Result<()>>)>,
+    ) -> Option<String> {
+        let Some((output, mut task)) = stderr_collector else {
+            return None;
+        };
+
+        match timeout(Duration::from_millis(300), &mut task).await {
+            Ok(Ok(Ok(()))) => {}
+            Ok(Ok(Err(read_error))) => {
+                warn!("Failed to read MCP server stderr: {}", read_error);
+            }
+            Ok(Err(join_error)) if !join_error.is_cancelled() => {
+                warn!("MCP stderr collector task failed: {}", join_error);
+            }
+            Ok(Err(_)) => {}
+            Err(_) => {
+                // 超时：中止任务以防止资源泄漏
+                task.abort();
+            }
+        }
+
+        let output = output.lock().await;
+        let stderr_output = String::from_utf8_lossy(&output).trim().to_string();
+        (!stderr_output.is_empty()).then_some(stderr_output)
+    }
+
+    /// 智能地合并 stderr 输出和 SDK 错误消息
+    ///
+    /// 如果 stderr 已经包含 SDK 错误消息，只返回 stderr 以避免重复
+    /// 否则，组合两者以获得最大上下文
+    fn merge_stdio_error(stderr_output: Option<String>, error_message: String) -> String {
+        match stderr_output {
+            Some(stderr_output) if !stderr_output.is_empty() => {
+                if stderr_output.contains(&error_message) {
+                    stderr_output
+                } else {
+                    format!("{}\n\nConnection error: {}", stderr_output, error_message)
+                }
+            }
+            _ => error_message,
+        }
+    }
+
     /// 构建带可选自定义请求头的 reqwest HTTP 客户端。
     fn build_http_client(
         headers: Option<HashMap<String, String>>,
@@ -232,7 +356,11 @@ impl McpClient {
                 Ok(())
             }
             Err(e) => {
-                let err_msg = format!("Failed to connect via {}: {}", transport_name, e);
+                let err_msg = if e.contains('\n') {
+                    format!("Failed to connect via {}:\n{}", transport_name, e)
+                } else {
+                    format!("Failed to connect via {}: {}", transport_name, e)
+                };
                 error!("{}", err_msg);
                 self.set_error(err_msg.clone()).await;
                 self.set_status(ServerStatus::Error).await;

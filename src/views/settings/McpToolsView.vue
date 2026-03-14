@@ -25,6 +25,7 @@
     const togglingServers = ref<Set<number>>(new Set());
     const activeCleanups = new Set<() => void>();
 
+    // 组件卸载时清理所有活跃的 watcher 以防止内存泄漏
     onUnmounted(() => {
         for (const cleanup of activeCleanups) {
             cleanup();
@@ -44,7 +45,12 @@
         }
     );
 
-    // 监听服务器状态变化，当连接或断开完成时更新数据库并解除禁用
+    // 监听服务器状态变化，在连接/断开完成后更新数据库并解锁 UI
+    //
+    // 状态转换：
+    // - connecting → connected: 连接成功，在数据库中启用服务器
+    // - connecting → error: 连接失败，不改变数据库（保持旧状态）
+    // - connected/connecting → disconnected: 断开成功，在数据库中禁用服务器
     watch(
         () => Array.from(togglingServers.value).map((id) => getServerStatus(id)),
         async (newStatuses, oldStatuses) => {
@@ -60,18 +66,18 @@
                 let shouldUpdateDb = false;
                 let newEnabledValue: 0 | 1 | null = null;
 
-                // 连接成功：启用服务器
+                // 连接成功：在数据库中启用服务器
                 if (oldStatus === 'connecting' && newStatus === 'connected') {
                     shouldUnlock = true;
                     shouldUpdateDb = true;
                     newEnabledValue = 1;
                 }
-                // 连接失败：不启用服务器
+                // 连接失败：不修改启用状态（保留用户意图）
                 else if (oldStatus === 'connecting' && newStatus === 'error') {
                     shouldUnlock = true;
-                    shouldUpdateDb = false; // 连接失败，不修改 enabled 状态
+                    shouldUpdateDb = false;
                 }
-                // 断开成功：禁用服务器
+                // 断开成功：在数据库中禁用服务器
                 else if (
                     (oldStatus === 'connected' || oldStatus === 'connecting') &&
                     newStatus === 'disconnected'
@@ -84,14 +90,14 @@
                 if (shouldUnlock) {
                     togglingServers.value.delete(serverId);
 
-                    //更新数据库
+                    // 用新的启用状态更新数据库
                     if (shouldUpdateDb && newEnabledValue !== null) {
                         try {
                             await updateMcpServer(serverId, {
                                 enabled: newEnabledValue,
                             });
 
-                            // 刷新 UI
+                            // 刷新 UI 以反映数据库变化
                             await serverListRef.value?.loadServers();
                             if (selectedServer.value?.id === serverId) {
                                 selectedServer.value = mcpStore.serverById(serverId) ?? null;
@@ -118,25 +124,31 @@
         await serverListRef.value?.loadServers();
 
         if (wasNewServer) {
-            // 新服务器保存成功
             serverListRef.value?.handleServerSaved();
 
             // 自动连接新创建的服务器（默认 enabled: 1）
-            // 取列表中最后一个服务器（即刚创建的）
+            // 这提供了更好的用户体验：用户创建服务器后立即可用，无需手动连接
             const servers = mcpStore.servers;
             const newServer = servers[servers.length - 1];
-            if (newServer && newServer.enabled) {
+            if (newServer) {
                 try {
+                    // 先在数据库中启用服务器
+                    await updateMcpServer(newServer.id, { enabled: 1 });
+                    await serverListRef.value?.loadServers();
+
+                    // 然后发起连接
                     togglingServers.value.add(newServer.id);
                     await mcpManager.connectServer(newServer);
                 } catch (error) {
                     console.error('Failed to auto-connect new server:', error);
-                    alertMessage.value?.error('自动连接服务器失败', 3000);
+                    alertMessage.value?.error(
+                        `自动连接服务器失败: ${getErrorMessage(error)}`,
+                        6000
+                    );
                     togglingServers.value.delete(newServer.id);
                 }
             }
         } else {
-            // 现有服务器更新成功
             alertMessage.value?.success('服务器配置已更新', 3000);
         }
     };
@@ -155,12 +167,18 @@
         if (type === 'success') {
             alertMessage.value?.success(message, 3000);
         } else {
-            alertMessage.value?.error(message, 3000);
+            alertMessage.value?.error(message, 6000);
         }
     };
 
+    const getErrorMessage = (error: unknown, fallback = '未知错误'): string => {
+        const message = error instanceof Error ? error.message : String(error);
+        return message && message !== '[object Object]' ? message : fallback;
+    };
+
     const handleToggleEnabled = async (serverId: number) => {
-        // 防止重复点击
+        // 防止双击触发多个操作
+        // togglingServers 集合充当锁，确保每个服务器同时只运行一个连接/断开操作
         if (togglingServers.value.has(serverId)) {
             return;
         }
@@ -170,25 +188,23 @@
             if (!server) return;
 
             const currentStatus = getServerStatus(serverId);
-            const willEnable = !server.enabled; // 将要启用还是禁用
+            const willEnable = !server.enabled;
 
-            // 锁定开关
+            // 锁定切换开关以防止并发操作
             togglingServers.value.add(serverId);
 
-            // 执行连接/断开操作
             if (willEnable) {
-                // 启用服务器：发起连接请求
+                // 启用服务器：发起连接
                 try {
                     await mcpManager.connectServer(server);
                 } catch (error) {
                     console.error('Failed to connect server:', error);
-                    alertMessage.value?.error('连接服务器失败', 3000);
+                    alertMessage.value?.error(`连接服务器失败: ${getErrorMessage(error)}`, 6000);
                     togglingServers.value.delete(serverId);
                 }
             } else {
-                // 禁用服务器
+                // 禁用服务器：如果已连接/正在连接则断开
                 if (currentStatus === 'connected' || currentStatus === 'connecting') {
-                    // 需要断开连接
                     try {
                         await mcpManager.disconnectServer(serverId);
                     } catch (error) {
@@ -197,13 +213,12 @@
                         togglingServers.value.delete(serverId);
                     }
                 } else {
-                    // 已经是 disconnected 或 error，直接更新数据库
+                    // 已经断开/错误：直接更新数据库
                     try {
                         await updateMcpServer(serverId, {
                             enabled: 0,
                         });
 
-                        // 刷新 UI
                         await serverListRef.value?.loadServers();
                         if (selectedServer.value?.id === serverId) {
                             selectedServer.value = mcpStore.serverById(serverId) ?? null;
@@ -222,9 +237,16 @@
         }
     };
 
+    /**
+     * 等待服务器达到 disconnected 或 error 状态
+     *
+     * 这在删除服务器前使用，以确保连接完全关闭
+     * 在服务器仍处于连接状态时删除可能会留下孤立的连接或导致竞态条件
+     */
     const waitForServerDisconnect = (serverId: number, timeoutMs = 5000): Promise<void> => {
         return new Promise((resolve, reject) => {
             const currentStatus = getServerStatus(serverId);
+            // 快速路径：已经断开连接
             if (currentStatus === 'disconnected' || currentStatus === 'error') {
                 resolve();
                 return;
@@ -258,6 +280,7 @@
     const handleDeleteServer = async (serverId: number) => {
         try {
             const currentStatus = getServerStatus(serverId);
+            // 删除前确保服务器已断开连接，以防止孤立的连接
             if (currentStatus === 'connected' || currentStatus === 'connecting') {
                 await mcpManager.disconnectServer(serverId);
                 await waitForServerDisconnect(serverId);
@@ -265,7 +288,7 @@
 
             await deleteMcpServer(serverId);
 
-            // 如果删除的是当前选中的服务器，清空选中状态
+            // 如果删除的是当前选中的服务器，清空选择
             if (selectedServer.value?.id === serverId) {
                 selectedServer.value = null;
             }

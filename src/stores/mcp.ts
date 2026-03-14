@@ -11,6 +11,7 @@ export const useMcpStore = defineStore('mcp', () => {
     // 状态
     const servers = ref<McpServerEntity[]>([]);
     const statuses = ref<Record<number, McpServerStatus>>({});
+    const errors = ref<Record<number, string | null>>({});
     const tools = ref<Record<number, McpToolEntity[]>>({});
     const initialized = ref(false);
     const loading = ref(false);
@@ -34,6 +35,10 @@ export const useMcpStore = defineStore('mcp', () => {
         return statuses.value[id] ?? 'disconnected';
     }
 
+    function getServerError(id: number): string | null {
+        return errors.value[id] ?? null;
+    }
+
     function getServerTools(id: number): McpToolEntity[] {
         return tools.value[id] ?? [];
     }
@@ -43,6 +48,9 @@ export const useMcpStore = defineStore('mcp', () => {
         try {
             loading.value = true;
             servers.value = await findAllMcpServers();
+            errors.value = Object.fromEntries(
+                servers.value.map((server) => [server.id, server.last_error])
+            );
         } catch (error) {
             console.error('[McpStore] Failed to load servers:', error);
         } finally {
@@ -62,28 +70,38 @@ export const useMcpStore = defineStore('mcp', () => {
         statuses.value[id] = status;
     }
 
+    function setServerError(id: number, error: string | null) {
+        errors.value[id] = error;
+    }
+
     async function initialize() {
         if (initialized.value) return;
 
         await loadServers();
 
-        // 初始化所有服务器状态为 disconnected
-        // 真实状态会通过 MCP_STATUS 事件在 autoConnect 完成后更新
+        // 首先将所有服务器初始化为 'disconnected' 状态
+        // 真实状态会在 autoConnect 完成后通过 MCP_STATUS 事件更新
+        // 这可以防止 UI 闪烁并提供一致的初始状态
         for (const server of servers.value) {
             setServerStatus(server.id, 'disconnected');
         }
 
-        // 监听 MCP_STATUS 事件（跨窗口状态同步）
+        // 监听 MCP_STATUS 事件以实现跨窗口状态同步
+        // 当一个窗口中的服务器连接/断开时，所有窗口都需要反映相同的状态
+        // 事件系统处理这种广播
         await eventService.on(AppEvent.MCP_STATUS, (event) => {
             setServerStatus(event.serverId, event.status);
-            // 同步更新 mcpManager 的状态缓存，确保 getEnabledToolDefinitions 能读到最新状态
-            mcpManager.setStatusFromEvent(event.serverId, event.status);
+            setServerError(event.serverId, event.error ?? null);
+            // 同步状态到 mcpManager 的缓存，以便 getEnabledToolDefinitions
+            // 在为 AI 请求构建工具列表时能读取最新状态
+            mcpManager.setStatusFromEvent(event.serverId, event.status, event.error ?? null);
             if (event.status === 'connected') {
                 loadServerTools(event.serverId);
             }
         });
 
-        // 从 Rust 后端批量刷新所有服务器的真实状态
+        // 从 Rust 后端批量刷新所有服务器状态
+        // 这确保我们获得真实的连接状态，而不仅仅是数据库状态
         await mcpManager.refreshAllServerStatuses();
 
         initialized.value = true;
@@ -101,11 +119,13 @@ export const useMcpStore = defineStore('mcp', () => {
         serverNameById,
         serverById,
         getServerStatus,
+        getServerError,
         getServerTools,
         // 操作
         loadServers,
         loadServerTools,
         setServerStatus,
+        setServerError,
         initialize,
     };
 });

@@ -16,12 +16,17 @@ export function useMcpConnection(serverId: Ref<number>) {
     const status = computed(() =>
         serverId.value === -1 ? 'disconnected' : mcpStore.getServerStatus(serverId.value)
     );
+    const lastError = computed(() =>
+        serverId.value === -1 ? null : mcpStore.getServerError(serverId.value)
+    );
 
     const isConnecting = ref(false);
     const isDisconnecting = ref(false);
     const isReconnecting = ref(false);
 
-    // 跟踪 handleReconnect 中创建的 watcher，在卸载时清理
+    // 跟踪活跃的 watcher 以防止内存泄漏
+    // 每个连接/断开操作都会创建一个监听状态变化的 watcher
+    // 如果组件在操作完成前卸载，需要清理这些 watcher 以避免内存泄漏
     const activeUnwatchers = new Set<() => void>();
 
     const handleConnect = async (): Promise<{ success: boolean; error?: string }> => {
@@ -34,10 +39,13 @@ export function useMcpConnection(serverId: Ref<number>) {
                 isConnecting.value = false;
                 return { success: false, error: '服务器不存在' };
             }
+            // 发起连接请求但不等待结果，实际结果通过状态事件返回
             mcpManager.connectServer(server).catch(() => {});
 
-            // 等待状态变化
+            // 通过响应式 watch 模式等待状态变化
+            // 这是必要的，因为 MCP 连接是异步的，状态更新通过事件系统传递，而非直接返回值
             return await new Promise<{ success: boolean; error?: string }>((resolve) => {
+                // 连接尝试的 15 秒超时
                 const timeoutId = setTimeout(() => {
                     unwatch();
                     activeUnwatchers.delete(unwatch);
@@ -57,7 +65,7 @@ export function useMcpConnection(serverId: Ref<number>) {
                         unwatch();
                         activeUnwatchers.delete(unwatch);
                         isConnecting.value = false;
-                        resolve({ success: false, error: '连接失败' });
+                        resolve({ success: false, error: lastError.value || '连接失败' });
                     }
                 });
                 activeUnwatchers.add(unwatch);
@@ -120,7 +128,8 @@ export function useMcpConnection(serverId: Ref<number>) {
                 return { success: false, error: `断开失败: ${disconnectResult.error}` };
             }
 
-            // 等待状态稳定
+            // 等待状态稳定后再重新连接
+            // 这可以防止竞态条件：新连接尝试在旧连接完全清理前就开始
             await new Promise((resolve) => setTimeout(resolve, 500));
 
             const connectResult = await handleConnect();

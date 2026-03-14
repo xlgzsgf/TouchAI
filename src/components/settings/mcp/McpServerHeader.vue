@@ -6,6 +6,8 @@
     import type { McpServerEntity } from '@database/types';
     import { computed, onUnmounted, toRef } from 'vue';
 
+    import { useMcpStore } from '@/stores/mcp';
+
     interface Props {
         server: McpServerEntity;
         isNewServer: boolean;
@@ -17,7 +19,9 @@
 
     const props = defineProps<Props>();
     const emit = defineEmits<Emits>();
+    const mcpStore = useMcpStore();
 
+    // 使用 toRef 创建一个响应式引用，当 props.server.id 变化时会更新
     const serverId = toRef(() => props.server.id);
     const {
         status,
@@ -46,6 +50,10 @@
                 return '未连接';
         }
     });
+
+    const serverError = computed(
+        () => mcpStore.getServerError(props.server.id) || props.server.last_error
+    );
 
     const onConnect = async () => {
         const result = await handleConnect();
@@ -189,12 +197,16 @@
         </div>
 
         <!-- 最近错误 -->
-        <div v-if="server.last_error && status === 'error'" class="mt-4 rounded-lg bg-red-50 p-3">
-            <div class="flex items-center gap-2">
-                <SvgIcon name="exclamation-triangle" class="h-4 w-4 text-red-500" />
-                <p class="font-mono text-xs text-red-600">
-                    {{ server.last_error }}
-                </p>
+        <div v-if="serverError && status === 'error'" class="mt-4 rounded-lg bg-red-50 p-3">
+            <div class="flex items-start gap-2">
+                <SvgIcon name="exclamation-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                <div class="custom-scrollbar max-h-[7.5rem] min-w-0 flex-1 overflow-y-auto pr-1">
+                    <p
+                        class="font-mono text-xs leading-5 break-all whitespace-pre-wrap text-red-600"
+                    >
+                        {{ serverError }}
+                    </p>
+                </div>
             </div>
         </div>
     </div>
