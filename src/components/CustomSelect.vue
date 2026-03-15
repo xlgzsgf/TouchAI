@@ -74,7 +74,7 @@
         </SelectTrigger>
 
         <SelectContent
-            class="mt-1 w-[var(--reka-select-trigger-width)] rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+            class="w-[var(--reka-select-trigger-width)] rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
         >
             <SelectItem
                 v-for="option in options"

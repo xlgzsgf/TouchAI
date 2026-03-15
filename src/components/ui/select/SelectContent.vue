@@ -22,7 +22,7 @@
         side: 'bottom',
         align: 'start',
         sideOffset: 4,
-        avoidCollisions: false,
+        avoidCollisions: true,
     });
 
     const emits = defineEmits<SelectContentEmits>();
@@ -48,7 +48,9 @@
                 )
             "
         >
-            <SelectViewport class="p-0">
+            <SelectViewport
+                class="max-h-[var(--reka-select-content-available-height)] overflow-y-auto p-0"
+            >
                 <slot />
             </SelectViewport>
         </SelectContent>
