@@ -1,6 +1,5 @@
 // Copyright (c) 2026. Qian Cheng. Licensed under GPL v3
 
-import AttachmentListPopup from '@/views/popups/AttachmentListPopup.vue';
 import ModelDropdownPopup from '@/views/popups/ModelDropdownPopup.vue';
 
 import type { PopupConfig, PopupType, SerializablePopupConfig, WindowInfo } from './types';
@@ -103,20 +102,6 @@ export function initializeBuiltInPopups(): void {
         component: ModelDropdownPopup,
         calculatePosition: (triggerElement, mainWindow, dimensions) => {
             const x = mainWindow.position.x - SHADOW_WIDTH;
-            const y = calculatePopupY(triggerElement, mainWindow, dimensions.height);
-            return { x, y };
-        },
-    });
-
-    // 注册附件溢出（右侧）
-    popupRegistry.register({
-        id: 'attachment-overflow-popup',
-        width: 256,
-        height: 320,
-        component: AttachmentListPopup,
-        calculatePosition: (triggerElement, mainWindow, dimensions) => {
-            const x =
-                mainWindow.position.x + mainWindow.size.width - dimensions.width - SHADOW_WIDTH;
             const y = calculatePopupY(triggerElement, mainWindow, dimensions.height);
             return { x, y };
         },

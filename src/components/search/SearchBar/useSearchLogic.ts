@@ -1,99 +1,110 @@
 // 副作用导入：确保所有标签插件在编辑器创建前完成注册
 import './tags';
 
-import { resolveAttachmentSupportStatus } from '@services/AiService/attachments';
-import { popupManager } from '@services/PopupService';
+import type { Index } from '@services/AiService/attachments';
 import { Editor } from '@tiptap/vue-3';
 import { type Ref, ref, shallowRef, watch } from 'vue';
 
 import {
     ATTACHMENT_TAG_NODE,
     type AttachmentTagAttrs,
+    getAttachmentTags,
     insertAttachmentTag,
     removeAttachmentTag,
-    updateAttachmentTagsSupport,
+    updateAttachmentTag,
 } from './tags/attachment';
-import { clearEditorPreservingModelTag, MODEL_TAG_NODE } from './tags/model';
+import { getModelTag, insertModelTag, MODEL_TAG_NODE, removeModelTag } from './tags/model';
 import {
-    clearEditor,
     createSearchEditorExtensions,
     findSearchTagChip,
     getEditorText,
     handleEditorClick,
     isBlankEditorAreaTarget,
     isCursorAtDocStart,
-    isPlainText,
     isSearchTagDomTarget,
     resolveMouseEventTarget,
+    setEditorText,
 } from './tiptap';
+import type { SearchModelOverride } from './types';
 import { useDragging } from './useDragging';
 import { type ModelCapabilities, useModelSelection } from './useModelSelection';
-import { useQuickShortcuts } from './useQuickShortcuts';
 
 export type { ModelCapabilities } from './useModelSelection';
 
 interface UseSearchInputOptions {
-    quickSearchEnabled: Ref<boolean>;
     editorHostRef: Ref<HTMLElement | null>;
-    emitSearch: (query: string) => void;
+    queryText: Ref<string>;
+    attachments: Ref<Index[]>;
+    modelOverride: Ref<SearchModelOverride>;
+    emitQueryText: (query: string) => void;
     emitModelChange: (capabilities: ModelCapabilities) => void;
-    emitRemoveAttachment: (id: string, fromEditor?: boolean) => void;
+    emitModelOverrideChange: (modelOverride: SearchModelOverride) => void;
+    emitRemoveAttachmentRequest: (id: string) => void;
     emitDragStart: () => void;
     emitDragEnd: () => void;
 }
 
 export interface UseSearchInputDeps {
-    hidePopup: () => Promise<void>;
-    createQuickShortcuts: typeof useQuickShortcuts;
     createModelSelection: typeof useModelSelection;
     createDragging: typeof useDragging;
 }
 
 const DEFAULT_DEPS: UseSearchInputDeps = {
-    hidePopup: () => popupManager.hide(),
-    createQuickShortcuts: useQuickShortcuts,
     createModelSelection: useModelSelection,
     createDragging: useDragging,
 };
 
+function createEmptyModelOverride(): SearchModelOverride {
+    return {
+        modelId: null,
+        providerId: null,
+    };
+}
+
 /**
  * 搜索输入编排层。
- * 负责聚合模型选择、快捷搜索、拖拽能力并对外输出统一交互接口。
+ * 负责聚合模型选择、编辑器与拖拽能力并对外输出统一交互接口。
  *
  * @param options 搜索输入依赖能力与事件回调。
  * @param deps 可注入外部副作用与子 composable 工厂。
- * @returns 搜索框状态、模型选择、快捷搜索和拖拽交互方法。
+ * @returns 搜索框状态、模型选择与拖拽交互方法。
  */
 export function useSearchInput(
     options: UseSearchInputOptions,
     deps: UseSearchInputDeps = DEFAULT_DEPS
 ) {
     const {
-        quickSearchEnabled,
         editorHostRef,
-        emitSearch,
+        queryText,
+        attachments,
+        modelOverride,
+        emitQueryText,
         emitModelChange,
-        emitRemoveAttachment,
+        emitModelOverrideChange,
+        emitRemoveAttachmentRequest,
         emitDragStart,
         emitDragEnd,
     } = options;
 
     // 1. 基础输入状态
-    const searchQuery = ref('');
+    const searchQuery = ref(queryText.value);
     const editor = shallowRef<Editor | null>(null);
     const logoContainerRef = ref<HTMLElement | null>(null);
     const isMultiLineState = ref(false);
+    const cursorAtStart = ref(false);
     let cachedLineHeight = 0;
+    let isApplyingControlledQuery = false;
+    let controlledTagSyncDepth = 0;
 
     // 2. 子能力组合
-    // 顶层编排：快速搜索、模型选择、拖拽行为各自独立，组合在 search bar。
-    const quickShortcuts = deps.createQuickShortcuts();
+    // 顶层编排：模型选择、拖拽行为各自独立，组合在 search bar。
     const modelSelection = deps.createModelSelection({
         searchQuery,
         editor,
         logoContainerRef,
-        closeQuickSearchPanel: quickShortcuts.closeQuickSearchPanel,
+        modelOverride,
     });
+
     const dragging = deps.createDragging({
         editor,
         emitDragStart,
@@ -150,10 +161,14 @@ export function useSearchInput(
         const extensions = createSearchEditorExtensions({
             placeholder: modelSelection.currentPlaceholder.value,
             onTagRemoved: (tagName, id) => {
+                if (controlledTagSyncDepth > 0) {
+                    return;
+                }
+
                 if (tagName === MODEL_TAG_NODE) {
-                    modelSelection.syncSelectedModelCleared();
+                    emitModelOverrideChange(createEmptyModelOverride());
                 } else if (tagName === ATTACHMENT_TAG_NODE) {
-                    emitRemoveAttachment(id, true);
+                    emitRemoveAttachmentRequest(id);
                 }
             },
         });
@@ -169,19 +184,24 @@ export function useSearchInput(
             onUpdate: ({ editor: updatedEditor }) => {
                 const text = getEditorText(updatedEditor);
                 searchQuery.value = text;
-                // 更新多行状态缓存
-                isMultiLineState.value = computeIsMultiLine(updatedEditor as Editor);
+                syncEditorDerivedState(updatedEditor as Editor);
                 onInput();
+
                 // 内容更新后滚动光标到可见区域
                 scrollCursorIntoView();
             },
             onSelectionUpdate: () => {
                 // 光标位置变化时滚动到可见区域（例如使用上下键移动光标）
+                cursorAtStart.value = isCursorAtStart();
                 scrollCursorIntoView();
             },
         });
 
         editor.value = ed;
+        syncEditorDerivedState(ed);
+        syncControlledQueryToEditor(queryText.value);
+        syncControlledModelOverrideToEditor();
+        syncControlledAttachmentsToEditor();
     }
 
     /**
@@ -193,52 +213,13 @@ export function useSearchInput(
         cachedLineHeight = 0;
     }
 
-    // 4. 下拉态收敛
-    /**
-     * 判断任意下拉层是否处于打开状态。
-     *
-     * @returns 任一弹层打开时为 true。
-     */
-    function isAnyDropdownOpen() {
-        return (
-            modelSelection.isPopupOpen.value ||
-            modelSelection.isModelDropdownOpen.value ||
-            modelSelection.isSearchingModel.value ||
-            quickShortcuts.isQuickSearchOpen.value
-        );
-    }
-
-    /**
-     * 统一关闭所有下拉层，常用于拖拽前收敛 UI。
-     *
-     * @returns Promise<void>
-     */
-    async function hideAllDropdowns() {
-        if (!isAnyDropdownOpen()) {
-            return;
-        }
-
-        try {
-            await deps.hidePopup();
-        } catch (error) {
-            console.error('[SearchBar] Failed to hide dropdown popups before dragging:', error);
-        } finally {
-            // 始终回收 UI 状态，确保拖拽前界面一致。
-            modelSelection.resetModelDropdownState();
-            quickShortcuts.closeQuickSearchPanel();
-        }
-    }
-    // 5. 状态同步监听
-    // 模型能力变化时需要同时通知外层（emitModelChange）和同步编辑器内附件标签的
-    // 支持状态（置灰/恢复），两者解耦在不同层级但由同一数据源驱动。
+    // 4. 状态同步监听
+    // 模型能力是页面附件域的上游输入，SearchBar 只上报变化，不再直接修改附件标签，
+    // 让附件 supportStatus 真正由页面 draft 决定后再受控回流到编辑器。
     watch(
         modelSelection.modelCapabilities,
         (capabilities) => {
             emitModelChange(capabilities);
-            const ed = editor.value;
-            if (ed) {
-                updateAttachmentTagsSupport(ed, capabilities);
-            }
         },
         { immediate: true }
     );
@@ -254,77 +235,237 @@ export function useSearchInput(
         }
     });
 
-    watch(
-        searchQuery,
-        (newQuery) => {
-            // 快速搜索被禁用时，任何残留面板都应立即关闭。
-            if (!quickSearchEnabled.value && quickShortcuts.isQuickSearchOpen.value) {
-                quickShortcuts.closeQuickSearchPanel();
-                return;
+    /**
+     * 统一刷新页面层需要的编辑器上下文事实，避免多个 watch 各自重复推导。
+     *
+     * @param ed 当前编辑器实例。
+     * @returns void
+     */
+    function syncEditorDerivedState(ed: Editor) {
+        isMultiLineState.value = computeIsMultiLine(ed);
+        cursorAtStart.value = isCursorAtStart();
+    }
+
+    /**
+     * 将受控 query 文本同步到编辑器。
+     * 页面层持有普通 query 真相源；SearchBar 只在文本确实不一致时执行富文本同步，
+     * 避免受控更新回流成 onUpdate -> emit -> watch 的循环。
+     *
+     * @param nextQuery 页面层期望显示的 query 文本。
+     * @returns void
+     */
+    function syncControlledQueryToEditor(nextQuery: string) {
+        searchQuery.value = nextQuery;
+
+        if (modelSelection.isModelDropdownOpen.value) {
+            return;
+        }
+
+        const ed = editor.value;
+        if (!ed) {
+            return;
+        }
+
+        const currentText = getEditorText(ed);
+        if (currentText === nextQuery) {
+            syncEditorDerivedState(ed);
+            return;
+        }
+
+        isApplyingControlledQuery = true;
+        try {
+            runControlledTagSync(() => {
+                setEditorText(ed, nextQuery);
+                syncControlledModelOverrideToEditor();
+                syncControlledAttachmentsToEditor();
+            });
+        } finally {
+            isApplyingControlledQuery = false;
+        }
+
+        syncEditorDerivedState(ed);
+    }
+
+    watch(queryText, (nextQuery) => {
+        syncControlledQueryToEditor(nextQuery);
+    });
+
+    /**
+     * 受控标签同步包装器。
+     * 页面 draft 回流到编辑器时会触发 NodeSync/onUpdate；这里通过深度计数屏蔽
+     * 这类“受控同步”产生的移除事件，避免它们再次被误判成用户手动删除。
+     */
+    function runControlledTagSync(effect: () => void) {
+        controlledTagSyncDepth += 1;
+        try {
+            effect();
+        } finally {
+            controlledTagSyncDepth -= 1;
+        }
+    }
+
+    function isSameModelTag(
+        current: ReturnType<typeof getModelTag>,
+        next: {
+            modelId: string;
+            modelName: string;
+            providerId: number | null;
+        }
+    ) {
+        return (
+            current?.modelId === next.modelId &&
+            current?.modelName === next.modelName &&
+            current?.providerId === next.providerId
+        );
+    }
+
+    /**
+     * 将页面层受控的模型覆盖状态投影到编辑器标签。
+     * 模型搜索会话打开时会暂时清空编辑器承载搜索输入，此时禁止回写标签，
+     * 等会话关闭并恢复草稿后再同步，避免把 dropdown 查询框污染成正文内容。
+     */
+    function syncControlledModelOverrideToEditor() {
+        const ed = editor.value;
+        if (!ed || modelSelection.isModelDropdownOpen.value) {
+            return;
+        }
+
+        const currentTag = getModelTag(ed);
+        if (!modelOverride.value.modelId) {
+            if (currentTag) {
+                runControlledTagSync(() => removeModelTag(ed));
+            }
+            return;
+        }
+
+        const modelName = modelSelection.selectedModelName.value;
+        if (!modelName) {
+            if (currentTag && currentTag.modelId !== modelOverride.value.modelId) {
+                runControlledTagSync(() => removeModelTag(ed));
+            }
+            return;
+        }
+
+        const nextTag = {
+            modelId: modelOverride.value.modelId,
+            modelName,
+            providerId: modelOverride.value.providerId,
+        };
+
+        if (isSameModelTag(currentTag, nextTag)) {
+            return;
+        }
+
+        runControlledTagSync(() => insertModelTag(ed, nextTag));
+    }
+
+    function toAttachmentTagAttrs(attachment: Index): AttachmentTagAttrs {
+        return {
+            attachmentId: attachment.id,
+            fileName: attachment.name,
+            fileType: attachment.type,
+            preview: attachment.preview,
+            supportStatus: attachment.supportStatus,
+        };
+    }
+
+    function isSameAttachmentTag(current: AttachmentTagAttrs, next: AttachmentTagAttrs) {
+        return (
+            current.attachmentId === next.attachmentId &&
+            current.fileName === next.fileName &&
+            current.fileType === next.fileType &&
+            current.preview === next.preview &&
+            current.supportStatus === next.supportStatus
+        );
+    }
+
+    /**
+     * 将页面受控附件列表 diff 后同步到编辑器。
+     * 这里故意使用“增删改”而不是整份重建文档，避免用户正在输入时丢失光标、
+     * 也避免误改模型标签或正文段落结构。
+     */
+    function syncControlledAttachmentsToEditor() {
+        const ed = editor.value;
+        if (!ed || modelSelection.isModelDropdownOpen.value) {
+            return;
+        }
+
+        const currentTags = getAttachmentTags(ed);
+        const currentById = new Map<string, AttachmentTagAttrs>(
+            currentTags.map((tag) => [tag.attachmentId, tag])
+        );
+        const nextTags = attachments.value.map(toAttachmentTagAttrs);
+        const nextById = new Map<string, AttachmentTagAttrs>(
+            nextTags.map((tag) => [tag.attachmentId, tag])
+        );
+
+        for (const currentTag of currentTags) {
+            if (!nextById.has(currentTag.attachmentId)) {
+                runControlledTagSync(() => removeAttachmentTag(ed, currentTag.attachmentId));
+            }
+        }
+
+        for (const nextTag of nextTags) {
+            const currentTag = currentById.get(nextTag.attachmentId);
+            if (!currentTag) {
+                runControlledTagSync(() => insertAttachmentTag(ed, nextTag));
+                continue;
             }
 
-            if (quickShortcuts.isQuickSearchOpen.value && !newQuery.trim()) {
-                quickShortcuts.closeQuickSearchPanel();
+            if (!isSameAttachmentTag(currentTag, nextTag)) {
+                runControlledTagSync(() => updateAttachmentTag(ed, nextTag));
             }
+        }
+    }
+
+    watch(
+        () => [
+            modelOverride.value.modelId,
+            modelOverride.value.providerId,
+            modelSelection.selectedModelName.value,
+            modelSelection.isModelDropdownOpen.value,
+        ],
+        () => {
+            syncControlledModelOverrideToEditor();
         },
-        { flush: 'post' }
+        { immediate: true, flush: 'post' }
     );
 
-    // 6. 输入与附件行为
+    watch(
+        () => ({
+            isModelDropdownOpen: modelSelection.isModelDropdownOpen.value,
+            attachments: attachments.value.map((attachment) => ({
+                id: attachment.id,
+                name: attachment.name,
+                type: attachment.type,
+                preview: attachment.preview ?? null,
+                supportStatus: attachment.supportStatus,
+            })),
+        }),
+        () => {
+            syncControlledAttachmentsToEditor();
+        },
+        { immediate: true, flush: 'post', deep: true }
+    );
+
+    // 5. 输入与附件行为
     /**
-     * 处理输入变更：模型搜索、快速搜索、普通搜索三种路径分流。
+     * 处理输入变更：普通输入回流到页面草稿；模型搜索模式则只刷新 dropdown 查询。
      *
      * @returns void
      */
     function onInput() {
-        // 如果模型选择下拉框打开，输入内容用于搜索模型，不触发搜索事件
         if (modelSelection.isModelDropdownOpen.value) {
             modelSelection.updateDropdownSearchQuery(searchQuery.value);
             return;
         }
 
-        // 关闭快速搜索能力时，退化为普通 search 事件透传。
-        if (!quickSearchEnabled.value) {
-            if (quickShortcuts.isQuickSearchOpen.value) {
-                quickShortcuts.closeQuickSearchPanel();
-            }
-            emitSearch(searchQuery.value);
-            return;
+        if (!isApplyingControlledQuery && searchQuery.value !== queryText.value) {
+            emitQueryText(searchQuery.value);
         }
-
-        // 快速搜索：输入即触发（单行纯文本时自动触发搜索，多行或含标签时不触发）
-        const query = searchQuery.value.trim();
-        const plainText = editor.value ? isPlainText(editor.value) : true;
-        if (!query || isMultiLine() || !plainText) {
-            quickShortcuts.closeQuickSearchPanel();
-        } else {
-            quickShortcuts.triggerQuickSearch(searchQuery.value);
-        }
-
-        emitSearch(searchQuery.value);
     }
 
-    // 6. 清空与附件行为
-    /**
-     * 清空输入并关闭快速搜索面板。
-     *
-     * @returns void
-     */
-    function clearInput(options?: { preserveModelTag?: boolean }) {
-        const ed = editor.value;
-        if (ed) {
-            if (options?.preserveModelTag) {
-                clearEditorPreservingModelTag(ed);
-            } else {
-                clearEditor(ed);
-            }
-        }
-        searchQuery.value = '';
-        // 清空输入时同步关闭快速搜索面板。
-        quickShortcuts.closeQuickSearchPanel();
-    }
-
-    // 7. 输入焦点工具
+    // 6. 输入焦点工具
     /**
      * 判断光标是否位于编辑器起始位置。
      *
@@ -366,13 +507,6 @@ export function useSearchInput(
         }
         if (!cachedLineHeight) return false;
         return ed.view.dom.scrollHeight > cachedLineHeight * 1.5;
-    }
-
-    /**
-     * 判断编辑器内容是否超过一行（返回缓存的状态）。
-     */
-    function isMultiLine(): boolean {
-        return isMultiLineState.value;
     }
 
     /**
@@ -467,54 +601,25 @@ export function useSearchInput(
         }
     }
 
-    /**
-     * 向编辑器中插入附件标签。
-     * 根据当前模型能力自动计算 supportStatus，使新插入的标签
-     * 在模型不支持该文件类型时立即呈现置灰状态。
-     */
-    function addAttachmentTag(attrs: AttachmentTagAttrs) {
-        const ed = editor.value;
-        if (!ed) return;
-        // 从当前模型能力推断附件支持状态，避免插入后再触发一次额外的批量更新。
-        const caps = modelSelection.modelCapabilities.value;
-        const supportStatus = resolveAttachmentSupportStatus(attrs.fileType, caps);
-        insertAttachmentTag(ed, { ...attrs, supportStatus });
-    }
-
-    /**
-     * 从编辑器中移除指定附件标签。
-     */
-    function removeAttachmentTagById(attachmentId: string) {
-        const ed = editor.value;
-        if (!ed) return;
-        removeAttachmentTag(ed, attachmentId);
-    }
-
     return {
         searchQuery,
         editor,
         logoContainerRef,
-        quickSearchPanel: quickShortcuts.quickSearchPanel,
         selectedModelId: modelSelection.selectedModelId,
         selectedModelName: modelSelection.selectedModelName,
+        selectedModel: modelSelection.selectedModel,
         selectedProviderId: modelSelection.selectedProviderId,
         activeModel: modelSelection.activeModel,
         isModelDropdownOpen: modelSelection.isModelDropdownOpen,
-        isQuickSearchOpen: quickShortcuts.isQuickSearchOpen,
-        isAnyDropdownOpen,
-        toggleModelDropdown: modelSelection.toggleModelDropdown,
-        closeModelDropdown: modelSelection.closeModelDropdown,
-        hideAllDropdowns,
-        openModelDropdown: modelSelection.openModelDropdown,
-        clearSelectedModel: modelSelection.clearSelectedModel,
-        openQuickSearchPanel: quickShortcuts.openQuickSearchPanel,
-        closeQuickSearchPanel: quickShortcuts.closeQuickSearchPanel,
-        moveQuickSearchSelection: quickShortcuts.moveQuickSearchSelection,
-        getHighlightedQuickShortcut: quickShortcuts.getHighlightedQuickShortcut,
-        openHighlightedQuickShortcut: quickShortcuts.openHighlightedQuickShortcut,
-        clearInput,
+        modelDropdownSearchQuery: modelSelection.dropdownSearchQuery,
+        prepareModelDropdownOpen: modelSelection.prepareModelDropdownOpen,
+        resetModelDropdownState: modelSelection.resetModelDropdownState,
+        selectModelFromDropdown: modelSelection.handleModelSelect,
+        getModelDropdownAnchor: modelSelection.getModelDropdownAnchor,
+        getModelDropdownContext: modelSelection.getModelDropdownContext,
         isCursorAtStart,
         isMultiLine: isMultiLineState,
+        cursorAtStart,
         focus,
         loadActiveModel: modelSelection.loadActiveModel,
         handleContainerMouseDown: dragging.handleContainerMouseDown,
@@ -522,8 +627,6 @@ export function useSearchInput(
         initEditor,
         destroyEditor,
         onEditorClick,
-        addAttachmentTag,
-        removeAttachmentTagById,
         clearDraggingState: dragging.clearEditorSelectionDragState,
     };
 }

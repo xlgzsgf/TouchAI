@@ -4,7 +4,6 @@
 
 <template>
     <div
-        v-if="isOpen"
         class="quick-search-panel mt-1.5 w-full rounded-lg border border-gray-200 bg-white/95 p-2 shadow-lg backdrop-blur"
     >
         <div
@@ -80,6 +79,7 @@
     });
 
     interface Props {
+        open: boolean;
         searchQuery: string;
         enabled?: boolean;
     }
@@ -93,13 +93,13 @@
     }>();
 
     const quickSearchLogic = useQuickSearchLogic({
+        open: toRef(props, 'open'),
         searchQuery: toRef(props, 'searchQuery'),
         enabled: toRef(props, 'enabled'),
         emitOpenUpdate: (value) => emit('update:open', value),
     });
 
     const {
-        isOpen,
         results,
         highlightedIndex,
         itemRefs,
@@ -114,17 +114,18 @@
         handleScroll,
         getNameSegments,
         handleItemClick,
-        open,
-        close,
+        open: openPanel,
+        close: closePanel,
+        syncClosedState,
         getHighlightedItem,
         openHighlightedItem,
         triggerSearch,
     } = quickSearchLogic;
 
     defineExpose({
-        isOpen,
-        open,
-        close,
+        open: openPanel,
+        close: closePanel,
+        syncClosedState,
         moveSelection,
         getHighlightedItem,
         openHighlightedItem,

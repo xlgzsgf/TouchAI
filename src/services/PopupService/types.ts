@@ -1,12 +1,11 @@
 // Copyright (c) 2026. Qian Cheng. Licensed under GPL v3
 
-import type { AttachmentSupportStatus } from '@services/AiService/attachments';
 import type { Component } from 'vue';
 
 /**
  * 弹窗窗口内容类型
  */
-export type PopupType = 'model-dropdown-popup' | 'attachment-overflow-popup';
+export type PopupType = 'model-dropdown-popup';
 
 /**
  * 窗口信息，用于位置计算
@@ -96,35 +95,14 @@ export interface ModelDropdownPopupItem {
     open_weights: number;
 }
 
-/**
- * 附件溢出弹窗数据
- */
-export interface AttachmentListData {
-    attachments: Array<{
-        id: string;
-        name: string;
-        path: string;
-        type: 'image' | 'file';
-        size?: number;
-        preview?: string;
-        mimeType?: string;
-        supportStatus?: AttachmentSupportStatus;
-    }>;
-}
-
-/**
- * 弹窗数据联合类型
- */
-export type PopupData = ModelDropdownData | AttachmentListData;
+export type PopupData = ModelDropdownData;
 
 /**
  * 根据 PopupType 获取对应的数据类型
  */
 export type PopupDataFor<T extends PopupType> = T extends 'model-dropdown-popup'
     ? ModelDropdownData
-    : T extends 'attachment-overflow-popup'
-      ? AttachmentListData
-      : never;
+    : never;
 
 /**
  * 弹窗数据更新事件载荷
@@ -144,6 +122,5 @@ export interface PopupDataPayload {
  */
 export interface PopupEventHandlers {
     onModelSelect?: (modelDbId: number) => void;
-    onAttachmentAction?: (action: 'remove' | 'preview', attachmentId: string) => void;
     onClose?: () => void;
 }

@@ -156,16 +156,6 @@ class PopupManager {
             unlisteners.push(unlisten);
         }
 
-        if (handlers.onAttachmentAction) {
-            const unlisten = await listen<{ action: 'remove' | 'preview'; attachmentId: string }>(
-                'popup-attachment-action',
-                (event) => {
-                    handlers.onAttachmentAction?.(event.payload.action, event.payload.attachmentId);
-                }
-            );
-            unlisteners.push(unlisten);
-        }
-
         if (handlers.onClose) {
             const unlisten = await listen('popup-closed', () => {
                 handlers.onClose?.();

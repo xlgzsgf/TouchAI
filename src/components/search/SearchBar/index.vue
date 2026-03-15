@@ -3,58 +3,55 @@
   -->
 
 <template>
-    <div ref="containerRef" class="relative mx-auto h-full w-full">
+    <div
+        class="search-bar-container relative flex h-full min-h-14 w-full items-center gap-2 p-3 transition-all duration-250 ease-in-out"
+        @mousedown="handleContainerMouseDown"
+    >
         <div
-            class="search-bar-container relative flex h-full min-h-14 w-full items-center gap-2 p-3 transition-all duration-250 ease-in-out"
-            @mousedown="handleContainerMouseDown"
+            ref="logoContainerRef"
+            class="logo-container flex shrink-0 cursor-pointer items-center justify-center self-center"
+            data-tauri-drag-region="false"
+            @mousedown.stop.prevent="handleModelDropdownToggleRequest"
         >
-            <div
-                ref="logoContainerRef"
-                class="logo-container flex shrink-0 cursor-pointer items-center justify-center self-center"
-                data-tauri-drag-region="false"
-                @mousedown.stop.prevent="toggleModelDropdown"
-            >
-                <ModelLogo
-                    v-if="selectedModelId || activeModel"
-                    :model-id="selectedModelId || activeModel?.model_id || ''"
-                    :name="selectedModelName || activeModel?.name || 'model'"
-                    class="border-2 border-gray-300 transition-colors hover:border-gray-400"
-                />
-                <img v-else :src="logoWord" alt="search" class="h-8 w-15 select-none" />
-            </div>
-
-            <div
-                ref="editorHostRef"
-                class="search-bar-editor-host custom-scrollbar-thin flex min-h-0 flex-1 cursor-default self-stretch overflow-y-auto"
-                :class="[
-                    disabled ? 'pointer-events-none opacity-60' : '',
-                    isMultiLine ? 'items-start' : 'items-center',
-                ]"
-                :style="{ maxHeight: 'calc(1.5em * 3 + 8px)' }"
-                @click="onEditorClick"
-                @mousedown.capture="handleEditorSelectionMouseDown"
-                @mousedown="handleEditorMouseDown"
-            >
-                <EditorContent v-if="editor" :editor="editor" />
-            </div>
+            <ModelLogo
+                v-if="selectedModel || activeModel"
+                :model-id="selectedModel?.model_id || activeModel?.model_id || ''"
+                :name="selectedModel?.name || activeModel?.name || 'model'"
+                class="border-2 border-gray-300 transition-colors hover:border-gray-400"
+            />
+            <img v-else :src="logoWord" alt="search" class="h-8 w-15 select-none" />
         </div>
 
-        <QuickSearchPanel
-            ref="quickSearchPanel"
-            :search-query="searchQuery"
-            :enabled="quickSearchEnabled && !isModelDropdownOpen"
-        />
+        <div
+            ref="editorHostRef"
+            class="search-bar-editor-host custom-scrollbar-thin flex min-h-0 flex-1 cursor-default self-stretch overflow-y-auto"
+            :class="[
+                disabled ? 'pointer-events-none opacity-60' : '',
+                isMultiLine ? 'items-start' : 'items-center',
+            ]"
+            :style="{ maxHeight: 'calc(1.5em * 3 + 8px)' }"
+            @click="onEditorClick"
+            @mousedown.capture="handleEditorSelectionMouseDown"
+            @mousedown="handleEditorMouseDown"
+        >
+            <EditorContent v-if="editor" :editor="editor" />
+        </div>
     </div>
 </template>
 
 <script setup lang="ts">
     import logoWord from '@assets/logo-word.svg';
     import ModelLogo from '@components/common/ModelLogo.vue';
-    import QuickSearchPanel from '@components/search/QuickSearchPanel/index.vue';
+    import type { Index } from '@services/AiService/attachments';
     import { EditorContent } from '@tiptap/vue-3';
-    import { onMounted, onUnmounted, ref, toRef, toRefs } from 'vue';
+    import { onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
 
     import { isSearchTagDomTarget, resolveMouseEventTarget } from './tiptap';
+    import type {
+        SearchCursorContext,
+        SearchModelDropdownState,
+        SearchModelOverride,
+    } from './types';
     import { type ModelCapabilities, useSearchInput } from './useSearchLogic';
 
     defineOptions({
@@ -63,54 +60,51 @@
 
     interface Props {
         disabled?: boolean;
-        quickSearchEnabled?: boolean;
+        queryText?: string;
+        attachments?: Index[];
+        modelOverride?: SearchModelOverride;
     }
 
     const props = withDefaults(defineProps<Props>(), {
         disabled: false,
-        quickSearchEnabled: true,
+        queryText: '',
+        attachments: () => [],
+        modelOverride: () => ({
+            modelId: null,
+            providerId: null,
+        }),
     });
 
-    const { disabled, quickSearchEnabled } = toRefs(props);
-    const containerRef = ref<HTMLElement | null>(null);
+    const { disabled, queryText, attachments, modelOverride } = toRefs(props);
     const editorHostRef = ref<HTMLElement | null>(null);
     let selectionDragCleanup: (() => void) | null = null;
 
     const emit = defineEmits<{
-        search: [query: string];
-        submit: [query: string];
-        clear: [];
+        'update:queryText': [query: string];
         modelChange: [capabilities: ModelCapabilities];
-        removeAttachment: [id: string, fromEditor?: boolean];
+        attachmentRemoveRequest: [id: string];
         dragStart: [];
         dragEnd: [];
+        cursorContextChange: [context: SearchCursorContext];
+        modelOverrideChange: [modelOverride: SearchModelOverride];
+        modelDropdownStateChange: [state: SearchModelDropdownState];
+        requestToggleModelDropdown: [];
     }>();
 
     const {
         logoContainerRef,
-        quickSearchPanel,
-        searchQuery,
         editor,
-        selectedModelId,
-        selectedModelName,
-        selectedProviderId,
+        selectedModel,
         activeModel,
         isModelDropdownOpen,
-        isQuickSearchOpen,
-        isAnyDropdownOpen,
-        toggleModelDropdown,
-        closeModelDropdown,
-        hideAllDropdowns,
-        openModelDropdown,
-        clearSelectedModel,
-        openQuickSearchPanel,
-        closeQuickSearchPanel,
-        moveQuickSearchSelection,
-        getHighlightedQuickShortcut,
-        openHighlightedQuickShortcut,
-        clearInput,
-        isCursorAtStart,
+        modelDropdownSearchQuery,
+        prepareModelDropdownOpen,
+        resetModelDropdownState,
+        selectModelFromDropdown,
+        getModelDropdownAnchor,
+        getModelDropdownContext,
         isMultiLine,
+        cursorAtStart,
         focus,
         loadActiveModel,
         handleContainerMouseDown,
@@ -118,17 +112,48 @@
         initEditor,
         destroyEditor,
         onEditorClick,
-        addAttachmentTag,
-        removeAttachmentTagById,
     } = useSearchInput({
-        quickSearchEnabled: toRef(props, 'quickSearchEnabled'),
         editorHostRef,
-        emitSearch: (query) => emit('search', query),
+        queryText,
+        attachments,
+        modelOverride,
+        emitQueryText: (value) => emit('update:queryText', value),
         emitModelChange: (capabilities) => emit('modelChange', capabilities),
-        emitRemoveAttachment: (id, fromEditor) => emit('removeAttachment', id, fromEditor),
+        emitModelOverrideChange: (value) => emit('modelOverrideChange', value),
+        emitRemoveAttachmentRequest: (id) => emit('attachmentRemoveRequest', id),
         emitDragStart: () => emit('dragStart'),
         emitDragEnd: () => emit('dragEnd'),
     });
+
+    function handleModelDropdownToggleRequest() {
+        emit('requestToggleModelDropdown');
+    }
+
+    function emitCursorContext() {
+        emit('cursorContextChange', {
+            isMultiLine: isMultiLine.value,
+            cursorAtStart: cursorAtStart.value,
+        });
+    }
+
+    function emitModelDropdownState() {
+        emit('modelDropdownStateChange', {
+            isOpen: isModelDropdownOpen.value,
+            query: modelDropdownSearchQuery.value,
+        });
+    }
+
+    watch(
+        () => [isMultiLine.value, cursorAtStart.value],
+        () => emitCursorContext(),
+        { immediate: true, flush: 'sync' }
+    );
+
+    watch(
+        () => [isModelDropdownOpen.value, modelDropdownSearchQuery.value],
+        () => emitModelDropdownState(),
+        { immediate: true, flush: 'sync' }
+    );
 
     /** 清理文本选区拖拽跟踪状态和全局事件监听。 */
     function clearEditorSelectionDragState() {
@@ -215,27 +240,13 @@
     });
 
     defineExpose({
-        selectedModelId,
-        selectedProviderId,
-        isModelDropdownOpen,
-        isQuickSearchOpen,
-        isAnyDropdownOpen,
-        clearSelectedModel,
-        closeModelDropdown,
-        closeQuickSearchPanel,
-        hideAllDropdowns,
-        openModelDropdown,
-        openQuickSearchPanel,
-        moveQuickSearchSelection,
-        getHighlightedQuickShortcut,
-        openHighlightedQuickShortcut,
+        prepareModelDropdownOpen,
+        resetModelDropdownState,
+        selectModelFromDropdown,
+        getModelDropdownAnchor,
+        getModelDropdownContext,
         focus,
-        clearInput,
         loadActiveModel,
-        isCursorAtStart,
-        isMultiLine,
-        addAttachmentTag,
-        removeAttachmentTagById,
     });
 </script>
 

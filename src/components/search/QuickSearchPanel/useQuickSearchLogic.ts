@@ -44,6 +44,7 @@ const DEFAULT_DEPS: UseQuickSearchDeps = {
 };
 
 interface UseQuickSearchLogicOptions {
+    open: Ref<boolean>;
     searchQuery: Ref<string>;
     enabled: Ref<boolean>;
     emitOpenUpdate: (value: boolean) => void;
@@ -177,7 +178,6 @@ function useQuickSearchFlow(
                 return;
             }
 
-            isOpen.value = true;
             emitOpenUpdate(true);
             results.value = rankedResults;
             itemRefs.value = [];
@@ -274,7 +274,6 @@ function useQuickSearchFlow(
     function hide() {
         // 仅关闭面板，不主动清空缓存；缓存回收由 close/prune 控制。
         resetLoadingState();
-        isOpen.value = false;
         emitOpenUpdate(false);
         resetResultState();
     }
@@ -356,10 +355,24 @@ function useQuickSearchFlow(
         resetLoadingState();
     }
 
+    /**
+     * 当页面层直接把 open 设为 false 时，同步回收面板内部异步状态。
+     * 这是受控组件的兜底收敛路径，避免旧查询在页面已判定关闭后又把结果回填回来。
+     */
+    function syncClosedStateFromParent() {
+        clearDebounceTimer();
+        requestId.value += 1;
+        pendingQuery.value = null;
+        pruneIconMaps(true);
+        resetLoadingState();
+        resetResultState();
+    }
+
     return {
         prepareIndex,
         open,
         close,
+        syncClosedStateFromParent,
         getHighlightedItem,
         openHighlightedItem,
         triggerSearch,
@@ -380,10 +393,9 @@ export function useQuickSearchLogic(
     options: UseQuickSearchLogicOptions,
     deps: UseQuickSearchDeps = DEFAULT_DEPS
 ) {
-    const { searchQuery, enabled, emitOpenUpdate } = options;
+    const { open, searchQuery, enabled, emitOpenUpdate } = options;
 
     // 1. 基础状态
-    const isOpen = ref(false);
     const results = ref<QuickShortcutItem[]>([]);
     const highlightedIndex = ref(-1);
     const itemRefs = ref<HTMLElement[]>([]);
@@ -394,14 +406,14 @@ export function useQuickSearchLogic(
 
     // 2. 子能力组合
     const layout = useLayout({
-        isOpen,
+        isOpen: open,
         results,
         highlightedIndex,
         scrollRef,
     });
 
     const assets = useAssetLoader({
-        isOpen,
+        isOpen: open,
         results,
         requestId,
         searchInFlight,
@@ -429,7 +441,7 @@ export function useQuickSearchLogic(
             searchQuery,
             enabled,
             emitOpenUpdate,
-            isOpen,
+            isOpen: open,
             results,
             highlightedIndex,
             itemRefs,
@@ -447,6 +459,15 @@ export function useQuickSearchLogic(
         },
         deps
     );
+
+    let isSyncingCloseToParent = false;
+
+    function requestCloseFromPanel() {
+        if (open.value) {
+            isSyncingCloseToParent = true;
+        }
+        quickSearch.close();
+    }
 
     // 3. 组件交互
     /**
@@ -481,13 +502,13 @@ export function useQuickSearchLogic(
     });
 
     watch(enabled, (val) => {
-        if (!val && isOpen.value) {
-            quickSearch.close();
+        if (!val && open.value) {
+            requestCloseFromPanel();
         }
     });
 
     watch(
-        [isOpen, results],
+        [open, results],
         ([open]) => {
             if (!open) return;
             void layout.syncLayout();
@@ -495,6 +516,23 @@ export function useQuickSearchLogic(
             assets.scheduleImageLoad(requestId.value, false);
         },
         { flush: 'post' }
+    );
+
+    watch(
+        open,
+        (nextOpen, previousOpen) => {
+            if (nextOpen || !previousOpen) {
+                return;
+            }
+
+            if (isSyncingCloseToParent) {
+                isSyncingCloseToParent = false;
+                return;
+            }
+
+            quickSearch.syncClosedStateFromParent();
+        },
+        { flush: 'sync' }
     );
 
     watch(
@@ -516,7 +554,7 @@ export function useQuickSearchLogic(
     );
 
     return {
-        isOpen,
+        isOpen: open,
         results,
         highlightedIndex,
         itemRefs,
@@ -532,7 +570,8 @@ export function useQuickSearchLogic(
         getNameSegments: quickSearch.getNameSegments,
         handleItemClick,
         open: quickSearch.open,
-        close: quickSearch.close,
+        close: requestCloseFromPanel,
+        syncClosedState: quickSearch.syncClosedStateFromParent,
         getHighlightedItem: quickSearch.getHighlightedItem,
         openHighlightedItem: quickSearch.openHighlightedItem,
         triggerSearch: quickSearch.triggerSearch,

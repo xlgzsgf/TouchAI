@@ -411,6 +411,32 @@ export function setEditorJSON(editor: Editor, json: JSONContent) {
     editor.commands.setContent(json);
 }
 
+/**
+ * 用纯文本重建编辑器内容。
+ */
+export function setEditorText(editor: Editor, text: string) {
+    if (!text) {
+        clearEditor(editor);
+        return;
+    }
+
+    const paragraphs = text.split('\n').map((line) => {
+        if (!line) {
+            return { type: 'paragraph' };
+        }
+
+        return {
+            type: 'paragraph',
+            content: [{ type: 'text', text: line }],
+        };
+    });
+
+    setEditorJSON(editor, {
+        type: 'doc',
+        content: paragraphs,
+    });
+}
+
 /** 清空编辑器内容。 */
 export function clearEditor(editor: Editor) {
     editor.commands.clearContent(true);

@@ -129,6 +129,59 @@ export function removeAttachmentTag(editor: Editor, attachmentId: string) {
 }
 
 /**
+ * 读取编辑器中的全部附件标签属性。
+ */
+export function getAttachmentTags(editor: Editor): AttachmentTagAttrs[] {
+    const tags: AttachmentTagAttrs[] = [];
+
+    editor.state.doc.descendants((node: PmNode) => {
+        if (node.type.name !== ATTACHMENT_TAG_NODE) {
+            return true;
+        }
+
+        tags.push({
+            attachmentId: node.attrs.attachmentId,
+            fileName: node.attrs.fileName,
+            fileType: node.attrs.fileType,
+            preview: node.attrs.preview ?? undefined,
+            supportStatus: node.attrs.supportStatus,
+        });
+
+        return true;
+    });
+
+    return tags;
+}
+
+/**
+ * 按 attachmentId 原位更新附件标签属性。
+ */
+export function updateAttachmentTag(editor: Editor, attrs: AttachmentTagAttrs) {
+    editor.commands.command(({ tr, state }: { tr: Transaction; state: EditorState }) => {
+        let updated = false;
+
+        state.doc.descendants((node: PmNode, pos: number) => {
+            if (
+                node.type.name !== ATTACHMENT_TAG_NODE ||
+                node.attrs.attachmentId !== attrs.attachmentId ||
+                updated
+            ) {
+                return true;
+            }
+
+            tr.setNodeMarkup(pos, undefined, {
+                ...node.attrs,
+                ...attrs,
+            });
+            updated = true;
+            return false;
+        });
+
+        return updated;
+    });
+}
+
+/**
  * 根据模型能力批量更新编辑器中所有附件标签的 supportStatus。
  * 使用「先收集再批量应用」模式：遍历文档收集需要更新的节点，
  * 然后在单次事务中通过 setNodeMarkup 修改属性。
