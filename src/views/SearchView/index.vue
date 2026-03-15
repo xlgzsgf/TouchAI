@@ -17,6 +17,7 @@
         useSearchOverlayMachine,
         useSearchPageController,
         useSearchPageLifecycle,
+        useSearchPanelFocusRestore,
     } from './composables/useSearchPage';
     import { useSearchRequestFlow } from './composables/useSearchRequest';
     import type {
@@ -65,6 +66,9 @@
         quickSearchOpen,
         quickSearchPanel,
         conversationPanel,
+    });
+    const { handlePanelSurfaceClick } = useSearchPanelFocusRestore({
+        controller,
     });
 
     const {
@@ -217,6 +221,7 @@
                 :is-loading="isLoading"
                 :error="error"
                 :is-pinned="isPinned"
+                @click="handlePanelSurfaceClick"
                 @pin-change="(value: boolean) => (isPinned = value)"
                 @regenerate-message="handleRegenerateMessage"
                 @drag-start="isDragging = true"
@@ -250,6 +255,7 @@
                     :open="quickSearchOpen"
                     :search-query="queryText"
                     :enabled="true"
+                    @click="handlePanelSurfaceClick"
                     @update:open="handleQuickSearchOpenChange"
                 />
             </div>

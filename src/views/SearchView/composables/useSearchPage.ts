@@ -187,6 +187,92 @@ export function useSearchPageController(options: {
     };
 }
 
+interface UseSearchPanelFocusRestoreOptions {
+    controller: SearchPageController;
+}
+
+/**
+ * 搜索页面板点击回焦策略。
+ * 负责把“点击会话/QuickSearch 非交互区域后回到搜索框”的规则集中到页面层，
+ * 避免模板组件承载浏览器选区时序与交互元素白名单等细节。
+ *
+ * @param options 页面 controller。
+ * @returns 面板表面点击处理器。
+ */
+export function useSearchPanelFocusRestore(options: UseSearchPanelFocusRestoreOptions) {
+    const { controller } = options;
+
+    function shouldKeepPanelClickFocus(target: HTMLElement | null): boolean {
+        if (!target) {
+            return false;
+        }
+
+        return Boolean(
+            target.closest(
+                [
+                    'a',
+                    'button',
+                    'input',
+                    'textarea',
+                    'select',
+                    'summary',
+                    '[role="button"]',
+                    '[contenteditable="true"]',
+                    '[data-drag-exclude="true"]',
+                ].join(', ')
+            )
+        );
+    }
+
+    function hasActiveTextSelection() {
+        const selection = window.getSelection();
+        return Boolean(
+            selection && !selection.isCollapsed && selection.toString().trim().length > 0
+        );
+    }
+
+    /**
+     * 选中文本后首次点击空白区域时，浏览器会先清理原有选区，
+     * 因此需要延后一帧再判断，才能把“清选区”和“回焦输入框”
+     * 合并到同一次点击里，而不是要求用户点击两次。
+     */
+    function restoreSearchFocusAfterSelectionClears() {
+        requestAnimationFrame(() => {
+            if (hasActiveTextSelection()) {
+                return;
+            }
+
+            void controller.focusSearchInput();
+        });
+    }
+
+    /**
+     * 点击结果/会话面板的非交互区域后，把输入焦点还给搜索框，
+     * 让用户能继续直接键入，同时不打断按钮点击或文本选区操作。
+     *
+     * @param event 面板 click 事件。
+     * @returns void
+     */
+    function handlePanelSurfaceClick(event: MouseEvent) {
+        const target = event.target as HTMLElement | null;
+
+        if (event.defaultPrevented || shouldKeepPanelClickFocus(target)) {
+            return;
+        }
+
+        if (hasActiveTextSelection()) {
+            restoreSearchFocusAfterSelectionClears();
+            return;
+        }
+
+        void controller.focusSearchInput();
+    }
+
+    return {
+        handlePanelSurfaceClick,
+    };
+}
+
 interface UseSearchPageLifecycleOptions {
     pageContainer: Ref<HTMLElement | null>;
     controller: SearchPageController;
