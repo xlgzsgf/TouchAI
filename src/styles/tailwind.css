@@ -90,6 +90,10 @@
     --color-code-inline-bg: #f1ece1;
     --color-code-inline-text: #691d1d;
 
+    /* 全局文本选区配色 */
+    --color-selection-bg: var(--color-primary-100);
+    --color-selection-outline: var(--color-primary-300);
+
     /* 滚动条配色 */
     --color-scrollbar-thumb: rgba(156, 163, 175, 0.4);
     --color-scrollbar-thumb-hover: rgba(156, 163, 175, 0.6);
@@ -123,6 +127,16 @@
         font-family: var(--font-sans), system-ui;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+    }
+
+    ::selection {
+        background-color: var(--color-selection-bg);
+        color: inherit;
+    }
+
+    ::-moz-selection {
+        background-color: var(--color-selection-bg);
+        color: inherit;
     }
 
     /* 允许输入框和文本区域选择文本 */

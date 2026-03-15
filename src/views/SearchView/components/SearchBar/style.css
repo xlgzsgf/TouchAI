@@ -36,18 +36,6 @@
     user-select: none;
 }
 
-/* ─── 选区颜色 ─────────────────────────────────────────────────── */
-
-:deep(.tiptap)::selection {
-    background-color: var(--color-primary-100);
-    color: inherit;
-}
-
-:deep(.tiptap)::-moz-selection {
-    background-color: var(--color-primary-100);
-    color: inherit;
-}
-
 /* 标签为原子节点，禁用浏览器原生 ::selection 高亮，由 range-selected 类统一控制 */
 :deep(.search-tag-chip::selection),
 :deep(.search-tag-chip *::selection) {
@@ -113,10 +101,10 @@
 
 /* 范围选中标签的高亮样式（由 createTagRangeSelectionPlugin 添加） */
 :deep(.search-tag-chip.search-tag-range-selected) {
-    background-color: var(--color-blue-50);
+    background-color: var(--color-selection-bg);
 }
 
 /* 单独选中标签时的边框高亮（ProseMirror NodeSelection） */
 :deep(.search-tag-chip.ProseMirror-selectednode) {
-    box-shadow: inset 0 0 0 1px var(--color-blue-300);
+    box-shadow: inset 0 0 0 1px var(--color-selection-outline);
 }

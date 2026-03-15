@@ -79,10 +79,10 @@
         box-shadow: 0 3px 10px rgba(107, 95, 84, 0.1);
         --markstream-code-fallback-bg: var(--touchai-code-body-bg);
         --markstream-code-fallback-fg: var(--color-primary-700);
-        --markstream-code-fallback-selection-bg: var(--color-primary-100);
+        --markstream-code-fallback-selection-bg: var(--color-selection-bg);
         --vscode-editor-background: var(--touchai-code-body-bg);
         --vscode-editor-foreground: theme('colors.gray.800');
-        --vscode-editor-selectionBackground: var(--color-primary-100);
+        --vscode-editor-selectionBackground: var(--color-selection-bg);
     }
 
     .touchai-markdown .code-block-header {
