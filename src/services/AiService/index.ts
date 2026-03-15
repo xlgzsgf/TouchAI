@@ -261,8 +261,8 @@ export class AiServiceManager {
                 // 持久化工具调用消息
                 const toolCallMessageId = await persister.persistToolCallMessage(chunkResponse);
 
-                // 执行每个工具调用
-                for (const toolCall of toolCalls) {
+                // 并行执行所有工具调用
+                const toolExecutionPromises = toolCalls.map(async (toolCall) => {
                     if (signal?.aborted) {
                         throw new AiError(AiErrorCode.REQUEST_CANCELLED);
                     }
@@ -299,17 +299,13 @@ export class AiServiceManager {
                             },
                         });
 
-                        // 追加错误结果消息
-                        messages.push({
-                            role: 'tool',
-                            content: errorResult,
-                            tool_call_id: toolCall.id,
-                            name: toolCall.name,
-                        });
-
-                        await persister.persistToolResultMessage(errorResult, null);
-
-                        continue;
+                        // 返回错误结果
+                        return {
+                            toolCall,
+                            result: errorResult,
+                            isError: true,
+                            toolLogId: null,
+                        };
                     }
 
                     // 发送调用开始事件
@@ -345,15 +341,29 @@ export class AiServiceManager {
                     }
 
                     // 执行工具
-                    const toolResult = await mcpManager.executeTool(toolCall.name, toolArgs, {
-                        signal,
-                        iteration,
-                        resolved: {
-                            serverId: mapping.serverId,
-                            originalName: mapping.originalName,
-                            toolTimeout: mapping.toolTimeout,
-                        },
-                    });
+                    let toolResult: { result: string; isError: boolean };
+                    try {
+                        toolResult = await mcpManager.executeTool(toolCall.name, toolArgs, {
+                            signal,
+                            iteration,
+                            resolved: {
+                                serverId: mapping.serverId,
+                                originalName: mapping.originalName,
+                                toolTimeout: mapping.toolTimeout,
+                            },
+                        });
+                    } catch (error) {
+                        // 捕获工具执行错误，转换为错误结果而非失败整个请求
+                        const errorMessage = error instanceof Error ? error.message : String(error);
+                        console.error(
+                            `[AiServiceManager] Tool execution failed: ${toolCall.name}`,
+                            error
+                        );
+                        toolResult = {
+                            result: `Tool execution failed: ${errorMessage}`,
+                            isError: true,
+                        };
+                    }
 
                     const durationMs = Date.now() - callStartTime;
 
@@ -380,16 +390,30 @@ export class AiServiceManager {
                         console.error('[AiServiceManager] Failed to update tool log:', err);
                     });
 
+                    // 返回结果
+                    return {
+                        toolCall,
+                        result: toolResult.result,
+                        isError: toolResult.isError,
+                        toolLogId,
+                    };
+                });
+
+                // 等待所有工具执行完成
+                const toolResults = await Promise.all(toolExecutionPromises);
+
+                // 按顺序处理结果（保持消息顺序一致）
+                for (const { toolCall, result, toolLogId } of toolResults) {
                     // 追加工具结果消息
                     messages.push({
                         role: 'tool',
-                        content: toolResult.result,
+                        content: result,
                         tool_call_id: toolCall.id,
                         name: toolCall.name,
                     });
 
                     // 持久化工具结果消息
-                    await persister.persistToolResultMessage(toolResult.result, toolLogId);
+                    await persister.persistToolResultMessage(result, toolLogId);
                 }
 
                 // 发送迭代结束事件
