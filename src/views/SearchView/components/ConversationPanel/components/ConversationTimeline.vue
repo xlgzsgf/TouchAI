@@ -37,7 +37,6 @@
     import { truncateText } from '@utils/text';
     import { computed, onUnmounted, ref, watch } from 'vue';
 
-    const TOOLBAR_HEIGHT = 72;
     const TIMELINE_TOP_OFFSET = 48;
     const TIMELINE_PADDING_TOP = 20;
     const TIMELINE_PADDING_BOTTOM = 30;
