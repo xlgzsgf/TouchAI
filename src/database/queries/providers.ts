@@ -1,6 +1,6 @@
 // Copyright (c) 2026. 千诚. Licensed under GPL v3
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { db } from '../index';
 import { models, providers } from '../schema';
@@ -58,20 +58,18 @@ export const findProviderById = async ({
 export const createProvider = async (
     providerDraft: ProviderCreateData
 ): Promise<ProviderEntity> => {
-    const drizzle = db.getDb();
-    await drizzle.insert(providers).values(providerDraft).run();
-
-    const lastInsert = await drizzle
-        .select()
-        .from(providers)
-        .orderBy(desc(providers.id))
-        .limit(1)
+    const createdProvider = await db
+        .getDb()
+        .insert(providers)
+        .values(providerDraft)
+        .returning()
         .get();
 
-    if (!lastInsert) {
+    if (!createdProvider || createdProvider.id === undefined) {
         throw new Error('Failed to create provider');
     }
-    return lastInsert;
+
+    return createdProvider;
 };
 
 /**

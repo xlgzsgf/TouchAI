@@ -15,7 +15,7 @@ import type {
 
 export type { ModelWithProvider } from '../types';
 
-const modelWithProviderSelection = {
+export const modelWithProviderSelection = {
     id: models.id,
     created_at: models.created_at,
     updated_at: models.updated_at,
@@ -98,15 +98,13 @@ export const findModelsWithProvider = async (
  * 创建模型
  */
 export const createModel = async (modelDraft: ModelCreateData): Promise<ModelEntity> => {
-    const drizzle = await db.getDb();
-    await drizzle.insert(models).values(modelDraft).run();
+    const createdModel = await db.getDb().insert(models).values(modelDraft).returning().get();
 
-    const lastInsert = await drizzle.select().from(models).orderBy(desc(models.id)).limit(1).get();
-
-    if (!lastInsert) {
+    if (!createdModel || createdModel.id === undefined) {
         throw new Error('Failed to create model');
     }
-    return lastInsert;
+
+    return createdModel;
 };
 
 /**

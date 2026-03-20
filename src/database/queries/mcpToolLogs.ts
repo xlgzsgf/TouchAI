@@ -84,25 +84,12 @@ export const findMcpToolLogsBySessionIdAndIteration = async (
  * 创建 MCP 工具日志
  */
 export const createMcpToolLog = async (data: McpToolLogCreateData): Promise<McpToolLogEntity> => {
-    const drizzle = db.getDb();
-    await drizzle.insert(mcpToolLogs).values(data).run();
+    const createdToolLog = await db.getDb().insert(mcpToolLogs).values(data).returning().get();
 
-    // 使用 last_insert_rowid() 获取刚插入的记录 ID，避免并发插入时取到错误记录
-    const [row] = await db.rawQuery<{ id: number }>('SELECT last_insert_rowid() as id');
-    if (!row) {
+    if (!createdToolLog || createdToolLog.id === undefined) {
         throw new Error('Failed to create MCP tool log');
     }
-
-    const lastInsert = await drizzle
-        .select()
-        .from(mcpToolLogs)
-        .where(eq(mcpToolLogs.id, row.id))
-        .get();
-
-    if (!lastInsert) {
-        throw new Error('Failed to create MCP tool log');
-    }
-    return lastInsert;
+    return createdToolLog;
 };
 
 /**
@@ -112,10 +99,15 @@ export const updateMcpToolLog = async (
     id: number,
     data: McpToolLogUpdateData
 ): Promise<McpToolLogEntity | undefined> => {
-    const drizzle = db.getDb();
-    await drizzle.update(mcpToolLogs).set(data).where(eq(mcpToolLogs.id, id)).run();
+    const updatedToolLog = await db
+        .getDb()
+        .update(mcpToolLogs)
+        .set(data)
+        .where(eq(mcpToolLogs.id, id))
+        .returning()
+        .get();
 
-    return db.getDb().select().from(mcpToolLogs).where(eq(mcpToolLogs.id, id)).get();
+    return updatedToolLog && updatedToolLog.id !== undefined ? updatedToolLog : undefined;
 };
 
 /**
@@ -125,14 +117,15 @@ export const updateMcpToolLogByCallId = async (
     toolCallId: string,
     data: McpToolLogUpdateData
 ): Promise<McpToolLogEntity | undefined> => {
-    const drizzle = db.getDb();
-    await drizzle
+    const updatedToolLog = await db
+        .getDb()
         .update(mcpToolLogs)
         .set(data)
         .where(eq(mcpToolLogs.tool_call_id, toolCallId))
-        .run();
+        .returning()
+        .get();
 
-    return findMcpToolLogByCallId(toolCallId);
+    return updatedToolLog && updatedToolLog.id !== undefined ? updatedToolLog : undefined;
 };
 
 /**
