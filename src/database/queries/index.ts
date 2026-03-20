@@ -1,6 +1,7 @@
 // Copyright (c) 2026. 千诚. Licensed under GPL v3
 
 export * from './aiRequests';
+export * from './attachments';
 export * from './llmMetadata';
 export * from './mcpServers';
 export * from './mcpToolLogs';

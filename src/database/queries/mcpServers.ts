@@ -40,25 +40,13 @@ export const findMcpServerByName = async (name: string): Promise<McpServerEntity
  * 创建 MCP 服务器
  */
 export const createMcpServer = async (data: McpServerCreateData): Promise<McpServerEntity> => {
-    const drizzle = db.getDb();
-    await drizzle.insert(mcpServers).values(data).run();
+    const createdServer = await db.getDb().insert(mcpServers).values(data).returning().get();
 
-    // 使用 last_insert_rowid() 获取刚插入的记录 ID，避免并发插入时取到错误记录
-    const [row] = await db.rawQuery<{ id: number }>('SELECT last_insert_rowid() as id');
-    if (!row) {
+    if (!createdServer || createdServer.id === undefined) {
         throw new Error('Failed to create MCP server');
     }
 
-    const lastInsert = await drizzle
-        .select()
-        .from(mcpServers)
-        .where(eq(mcpServers.id, row.id))
-        .get();
-
-    if (!lastInsert) {
-        throw new Error('Failed to create MCP server');
-    }
-    return lastInsert;
+    return createdServer;
 };
 
 /**
@@ -68,10 +56,15 @@ export const updateMcpServer = async (
     id: number,
     data: McpServerUpdateData
 ): Promise<McpServerEntity | undefined> => {
-    const drizzle = db.getDb();
-    await drizzle.update(mcpServers).set(data).where(eq(mcpServers.id, id)).run();
+    const updatedServer = await db
+        .getDb()
+        .update(mcpServers)
+        .set(data)
+        .where(eq(mcpServers.id, id))
+        .returning()
+        .get();
 
-    return findMcpServerById(id);
+    return updatedServer && updatedServer.id !== undefined ? updatedServer : undefined;
 };
 
 /**

@@ -60,21 +60,13 @@ export const findMcpToolByServerIdAndName = async (
  * 创建 MCP 工具
  */
 export const createMcpTool = async (data: McpToolCreateData): Promise<McpToolEntity> => {
-    const drizzle = db.getDb();
-    await drizzle.insert(mcpTools).values(data).run();
+    const createdTool = await db.getDb().insert(mcpTools).values(data).returning().get();
 
-    // 使用 last_insert_rowid() 获取刚插入的记录 ID，避免并发插入时取到错误记录
-    const [row] = await db.rawQuery<{ id: number }>('SELECT last_insert_rowid() as id');
-    if (!row) {
+    if (!createdTool || createdTool.id === undefined) {
         throw new Error('Failed to create MCP tool');
     }
 
-    const lastInsert = await drizzle.select().from(mcpTools).where(eq(mcpTools.id, row.id)).get();
-
-    if (!lastInsert) {
-        throw new Error('Failed to create MCP tool');
-    }
-    return lastInsert;
+    return createdTool;
 };
 
 /**
@@ -84,10 +76,15 @@ export const updateMcpTool = async (
     id: number,
     data: McpToolUpdateData
 ): Promise<McpToolEntity | undefined> => {
-    const drizzle = db.getDb();
-    await drizzle.update(mcpTools).set(data).where(eq(mcpTools.id, id)).run();
+    const updatedTool = await db
+        .getDb()
+        .update(mcpTools)
+        .set(data)
+        .where(eq(mcpTools.id, id))
+        .returning()
+        .get();
 
-    return findMcpToolById(id);
+    return updatedTool && updatedTool.id !== undefined ? updatedTool : undefined;
 };
 
 /**

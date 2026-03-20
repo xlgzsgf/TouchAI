@@ -119,7 +119,6 @@ class DatabaseBackupService {
 
         let sourceBackupPath: string | null = null;
         let migratedSource = false;
-
         let sourceDb: Database | null = null;
         try {
             if (onProgress) onProgress('正在加载导入数据库...', 30);
@@ -140,8 +139,11 @@ class DatabaseBackupService {
                 );
 
                 const sourceBackupDb = await Database.load(`sqlite://${sourceBackupPath}`);
-                await migrate(sourceBackupDb);
-                await sourceBackupDb.close();
+                try {
+                    await migrate(sourceBackupDb);
+                } finally {
+                    await sourceBackupDb.close();
+                }
                 migratedSource = true;
 
                 if (onProgress) onProgress('正在合并数据...', 60);
@@ -322,6 +324,8 @@ class DatabaseBackupService {
             'models',
             'sessions',
             'messages',
+            'attachments',
+            'message_attachments',
             'ai_requests',
             'llm_metadata',
             'settings',
@@ -342,25 +346,114 @@ class DatabaseBackupService {
     }
 
     /**
+     * 合并附件缓存及消息附件关联。
+     */
+    private async mergeAttachmentData(currentDb: Database): Promise<void> {
+        await currentDb.execute(`
+            INSERT INTO main.attachments (
+                hash, type, original_name, mime_type, size, created_at
+            )
+            SELECT
+                source_attachments.hash,
+                source_attachments.type,
+                source_attachments.original_name,
+                source_attachments.mime_type,
+                source_attachments.size,
+                source_attachments.created_at
+            FROM imported.attachments AS source_attachments
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM main.attachments AS existing_attachments
+                WHERE existing_attachments.hash = source_attachments.hash
+            )
+        `);
+
+        await currentDb.execute(`
+            INSERT INTO main.message_attachments (
+                message_id, attachment_id, sort_order, created_at
+            )
+            SELECT
+                target_messages.id,
+                target_attachments.id,
+                source_message_attachments.sort_order,
+                source_message_attachments.created_at
+            FROM imported.message_attachments AS source_message_attachments
+            INNER JOIN imported.attachments AS source_attachments
+                ON source_attachments.id = source_message_attachments.attachment_id
+            INNER JOIN main.attachments AS target_attachments
+                ON target_attachments.hash = source_attachments.hash
+            INNER JOIN imported.messages AS source_messages
+                ON source_messages.id = source_message_attachments.message_id
+            INNER JOIN imported.sessions AS source_sessions
+                ON source_sessions.id = source_messages.session_id
+            INNER JOIN main.sessions AS target_sessions
+                ON target_sessions.session_id = source_sessions.session_id
+            INNER JOIN main.messages AS target_messages
+                ON target_messages.session_id = target_sessions.id
+               AND target_messages.role = source_messages.role
+               AND target_messages.content = source_messages.content
+               AND target_messages.created_at = source_messages.created_at
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM main.message_attachments AS existing_message_attachments
+                WHERE existing_message_attachments.message_id = target_messages.id
+                  AND existing_message_attachments.attachment_id = target_attachments.id
+                  AND existing_message_attachments.sort_order = source_message_attachments.sort_order
+            )
+        `);
+    }
+
+    /**
      * 差量导入对话数据（会话、消息、AI请求记录）
      * 这是两种导入模式的公共部分
      */
     private async mergeChatData(currentDb: Database): Promise<void> {
         // 合并会话
         await currentDb.execute(`
-            INSERT INTO main.sessions (session_id, title, model, created_at, updated_at)
-            SELECT session_id, title, model, created_at, updated_at
-            FROM imported.sessions
+            INSERT INTO main.sessions (
+                session_id, title, model, provider_id, last_message_preview, last_message_at,
+                message_count, pinned_at, archived_at, created_at, updated_at
+            )
+            SELECT
+                source_sessions.session_id,
+                source_sessions.title,
+                source_sessions.model,
+                target_session_providers.id,
+                source_sessions.last_message_preview,
+                source_sessions.last_message_at,
+                source_sessions.message_count,
+                source_sessions.pinned_at,
+                source_sessions.archived_at,
+                source_sessions.created_at,
+                source_sessions.updated_at
+            FROM imported.sessions AS source_sessions
+            LEFT JOIN imported.providers AS source_session_providers
+                ON source_session_providers.id = source_sessions.provider_id
+            LEFT JOIN main.providers AS target_session_providers
+                ON target_session_providers.name = source_session_providers.name
+               AND target_session_providers.type = source_session_providers.type
             WHERE true
             ON CONFLICT(session_id) DO UPDATE SET
                 title = excluded.title,
                 model = excluded.model,
+                provider_id = excluded.provider_id,
+                last_message_preview = excluded.last_message_preview,
+                last_message_at = excluded.last_message_at,
+                message_count = excluded.message_count,
+                pinned_at = excluded.pinned_at,
+                archived_at = excluded.archived_at,
                 updated_at = excluded.updated_at
         `);
 
         // 合并消息
         await currentDb.execute(`
-            INSERT INTO main.messages (session_id, role, content, created_at, updated_at)
+            INSERT INTO main.messages (
+                session_id,
+                role,
+                content,
+                created_at,
+                updated_at
+            )
             SELECT target_sessions.id,
                    source_messages.role,
                    source_messages.content,
@@ -380,6 +473,8 @@ class DatabaseBackupService {
                   AND existing_messages.created_at = source_messages.created_at
             )
         `);
+
+        await this.mergeAttachmentData(currentDb);
 
         // 合并 AI 请求记录
         await currentDb.execute(`
@@ -572,12 +667,25 @@ class DatabaseBackupService {
             // 3. 重置自增序列
             await currentDb.execute(`
                 DELETE FROM main.sqlite_sequence
-                WHERE name IN ('providers', 'models', 'sessions', 'messages', 'ai_requests', 'settings', 'statistics', 'llm_metadata');
+                WHERE name IN (
+                    'providers',
+                    'models',
+                    'sessions',
+                    'messages',
+                    'attachments',
+                    'message_attachments',
+                    'ai_requests',
+                    'settings',
+                    'statistics',
+                    'llm_metadata'
+                );
 
                 INSERT INTO main.sqlite_sequence (name, seq) SELECT 'providers', COALESCE(MAX(id), 0) FROM main.providers;
                 INSERT INTO main.sqlite_sequence (name, seq) SELECT 'models', COALESCE(MAX(id), 0) FROM main.models;
                 INSERT INTO main.sqlite_sequence (name, seq) SELECT 'sessions', COALESCE(MAX(id), 0) FROM main.sessions;
                 INSERT INTO main.sqlite_sequence (name, seq) SELECT 'messages', COALESCE(MAX(id), 0) FROM main.messages;
+                INSERT INTO main.sqlite_sequence (name, seq) SELECT 'attachments', COALESCE(MAX(id), 0) FROM main.attachments;
+                INSERT INTO main.sqlite_sequence (name, seq) SELECT 'message_attachments', COALESCE(MAX(id), 0) FROM main.message_attachments;
                 INSERT INTO main.sqlite_sequence (name, seq) SELECT 'ai_requests', COALESCE(MAX(id), 0) FROM main.ai_requests;
                 INSERT INTO main.sqlite_sequence (name, seq) SELECT 'settings', COALESCE(MAX(id), 0) FROM main.settings;
                 INSERT INTO main.sqlite_sequence (name, seq) SELECT 'statistics', COALESCE(MAX(id), 0) FROM main.statistics;

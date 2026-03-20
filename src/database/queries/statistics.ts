@@ -33,19 +33,18 @@ export const setStatistic = async ({
     key: StatisticIdentifier;
     value: string;
 }): Promise<boolean> => {
-    const drizzle = db.getDb();
-
-    await drizzle
+    const updatedStatistic = await db
+        .getDb()
         .insert(statistics)
         .values({ key, value })
         .onConflictDoUpdate({
             target: statistics.key,
             set: { value },
         })
-        .run();
+        .returning({ key: statistics.key })
+        .get();
 
-    const updated = await getStatistic({ key });
-    if (updated === null) {
+    if (!updatedStatistic || updatedStatistic.key === undefined) {
         throw new Error('Failed to set statistic');
     }
 
