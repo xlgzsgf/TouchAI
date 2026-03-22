@@ -277,6 +277,19 @@
         lastScrollTop.value = conversationContainer.value.scrollTop;
     }
 
+    /**
+     * 统一按当前位置刷新“跳到底部”按钮，避免时间轴跳转和消息追加各自维护一套显示条件。
+     */
+    function refreshScrollToBottomVisibility() {
+        if (!conversationContainer.value) {
+            showScrollToBottom.value = false;
+            return;
+        }
+
+        const atBottom = isScrolledToBottom(conversationContainer.value);
+        showScrollToBottom.value = hasScrollbar() && !atBottom;
+    }
+
     function scrollToUserMessageTop(messageId: string, gap = USER_MESSAGE_SCROLL_GAP): boolean {
         if (!conversationContainer.value || !messageListRef.value) {
             return false;
@@ -304,7 +317,20 @@
     }
 
     function handleTimelineJump(messageId: string) {
-        scrollToUserMessageTop(messageId, USER_MESSAGE_SCROLL_GAP + TIMELINE_JUMP_OFFSET);
+        const didJump = scrollToUserMessageTop(
+            messageId,
+            USER_MESSAGE_SCROLL_GAP + TIMELINE_JUMP_OFFSET
+        );
+        if (!didJump) {
+            return;
+        }
+
+        // 时间轴点击等同用户手动上滚查看旧消息，直接标记用户自行滚动
+        markUserScrollIntent();
+        if (outputScrollBehavior.value === 'follow_output') {
+            isAutoScrollEnabled.value = false;
+        }
+        refreshScrollToBottomVisibility();
     }
 
     // 滚动到底部
@@ -345,25 +371,34 @@
                     .find((message) => message.role === 'user');
 
                 if (outputScrollBehavior.value === 'follow_output') {
-                    // 新请求时重置为跟踪模式
-                    isAutoScrollEnabled.value = true;
-                    showScrollToBottom.value = false;
-                    nextTick(() => {
-                        syncToBottom();
-                    });
+                    /**
+                     * 只有“新的用户提问”才代表一轮新请求开始，应当重新进入跟随模式。
+                     * 如果只是用户点击时间轴后，AI继续产出新消息，则要保持停留在当前阅读位置。
+                     */
+                    if (latestAppendedUserMessage) {
+                        isAutoScrollEnabled.value = true;
+                        showScrollToBottom.value = false;
+                        nextTick(() => {
+                            syncToBottom();
+                        });
+                    } else if (!isAutoScrollEnabled.value) {
+                        nextTick(() => {
+                            refreshScrollToBottomVisibility();
+                        });
+                    }
                 } else if (outputScrollBehavior.value === 'jump_to_top') {
                     isAutoScrollEnabled.value = false;
                     nextTick(() => {
                         if (latestAppendedUserMessage) {
                             scrollToUserMessageTop(latestAppendedUserMessage.id);
                         }
-                        const atBottom = isScrolledToBottom(conversationContainer.value);
-                        showScrollToBottom.value = hasScrollbar() && !atBottom;
+                        refreshScrollToBottomVisibility();
                     });
                 } else {
                     isAutoScrollEnabled.value = false;
-                    const atBottom = isScrolledToBottom(conversationContainer.value);
-                    showScrollToBottom.value = hasScrollbar() && !atBottom;
+                    nextTick(() => {
+                        refreshScrollToBottomVisibility();
+                    });
                 }
             }
         }
@@ -380,8 +415,7 @@
             }
 
             await nextTick();
-            const atBottom = isScrolledToBottom(conversationContainer.value);
-            showScrollToBottom.value = hasScrollbar() && !atBottom;
+            refreshScrollToBottomVisibility();
         },
         { immediate: true }
     );
