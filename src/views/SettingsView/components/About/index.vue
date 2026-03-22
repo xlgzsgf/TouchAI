@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { getTauriVersion, getVersion } from '@tauri-apps/api/app';
     import { openUrl } from '@tauri-apps/plugin-opener';
     import { onMounted, ref } from 'vue';
@@ -132,7 +132,7 @@
                     <div
                         class="bg-primary-50 text-primary-600 flex h-16 w-16 items-center justify-center rounded-lg"
                     >
-                        <SvgIcon name="information-circle" class="h-6 w-6" />
+                        <AppIcon name="information-circle" class="h-6 w-6" />
                     </div>
 
                     <div class="flex-1">

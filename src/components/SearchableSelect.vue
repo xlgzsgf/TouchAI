@@ -12,7 +12,7 @@
         }
     "
 >
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 
     interface Props {
@@ -291,7 +291,7 @@
                     </span>
                 </slot>
             </div>
-            <SvgIcon
+            <AppIcon
                 name="chevron-down"
                 :class="`ml-3 h-4 w-4 flex-shrink-0 text-gray-400 transition-transform ${
                     isOpen ? 'rotate-180' : ''
@@ -305,7 +305,7 @@
         >
             <div class="border-b border-gray-100 p-2">
                 <div class="relative">
-                    <SvgIcon
+                    <AppIcon
                         name="search"
                         class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400"
                     />

@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
+    import AppIcon from '@components/AppIcon.vue';
+    import type { AppIconName } from '@components/appIconMap';
     import DialogShell from '@components/DialogShell.vue';
-    import SvgIcon from '@components/SvgIcon.vue';
     import { Button } from '@components/ui/button';
     import { computed } from 'vue';
 
@@ -16,7 +17,7 @@
         dismiss: [];
     }>();
 
-    const iconConfig = computed(() => {
+    const iconConfig = computed<{ name: AppIconName; bg: string; text: string }>(() => {
         switch (props.status) {
             case 'success':
                 return { name: 'check-circle', bg: 'bg-green-50', text: 'text-green-600' };
@@ -46,13 +47,13 @@
                 class="absolute top-3 right-3 h-7 w-7 rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
                 @click="emit('dismiss')"
             >
-                <SvgIcon name="x" class="h-4 w-4" />
+                <AppIcon name="x" class="h-4 w-4" />
             </Button>
             <div
                 class="mb-4 flex h-12 w-12 items-center justify-center rounded-full"
                 :class="[iconConfig.bg, iconConfig.text]"
             >
-                <SvgIcon
+                <AppIcon
                     :name="iconConfig.name"
                     :class="'h-6 w-6' + (isSpinning ? ' animate-spin' : '')"
                 />

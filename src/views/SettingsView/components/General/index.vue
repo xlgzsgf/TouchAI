@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
     import AlertMessage from '@components/AlertMessage.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import CustomSelect from '@components/CustomSelect.vue';
-    import SvgIcon from '@components/SvgIcon.vue';
     import { native } from '@services/NativeService';
     import { sendNotification } from '@tauri-apps/plugin-notification';
     import { storeToRefs } from 'pinia';
@@ -354,7 +354,7 @@
                     <div
                         class="bg-primary-50 text-primary-600 flex h-16 w-16 items-center justify-center rounded-lg"
                     >
-                        <SvgIcon name="settings" class="h-6 w-6" />
+                        <AppIcon name="settings" class="h-6 w-6" />
                     </div>
 
                     <div class="flex-1">
@@ -398,7 +398,7 @@
                         class="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3"
                     >
                         <div class="flex items-center gap-2">
-                            <SvgIcon name="exclamation-triangle" class="h-4 w-4 text-red-600" />
+                            <AppIcon name="exclamation-triangle" class="h-4 w-4 text-red-600" />
                             <span class="font-serif text-sm text-red-600">
                                 快捷键注册失败，可能已被其他应用占用
                             </span>

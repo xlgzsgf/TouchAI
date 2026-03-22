@@ -1,7 +1,8 @@
 ﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
+    import type { AppIconName } from '@components/appIconMap';
     import {
         DropdownMenu,
         DropdownMenuContent,
@@ -13,7 +14,7 @@
     export interface ContextMenuItem {
         key: string;
         label: string;
-        icon?: string;
+        icon?: AppIconName;
         danger?: boolean;
     }
 
@@ -69,7 +70,7 @@
                 ]"
                 @select.prevent="handleSelect(item.key)"
             >
-                <SvgIcon v-if="item.icon" :name="item.icon" class="h-4 w-4" />
+                <AppIcon v-if="item.icon" :name="item.icon" class="h-4 w-4" />
                 {{ item.label }}
             </DropdownMenuItem>
         </DropdownMenuContent>

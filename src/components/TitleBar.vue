@@ -1,9 +1,8 @@
-<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
+﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
+    import AppIcon from '@components/AppIcon.vue';
     import { getCurrentWindow } from '@tauri-apps/api/window';
-
-    import SvgIcon from './SvgIcon.vue';
 
     interface Props {
         title?: string;
@@ -51,7 +50,7 @@
                 title="最小化"
                 @click="handleMinimize"
             >
-                <SvgIcon name="minimize" class="h-4 w-4" />
+                <AppIcon name="minimize" class="h-4 w-4" />
             </button>
 
             <button
@@ -61,7 +60,7 @@
                 title="关闭"
                 @click="handleClose"
             >
-                <SvgIcon name="close" class="h-4 w-4" />
+                <AppIcon name="close" class="h-4 w-4" />
             </button>
         </div>
     </div>

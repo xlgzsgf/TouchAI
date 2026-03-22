@@ -1,7 +1,8 @@
 ﻿<!-- Copyright (c) 2025-2026. Qian Cheng. Licensed under GPL v3 -->
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
+    import type { AppIconName } from '@components/appIconMap';
     import { native } from '@services/NativeService';
     import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
     import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -14,7 +15,7 @@
 
     interface MenuItem {
         id: string;
-        icon: string;
+        icon: AppIconName;
         label: string;
         action: () => void;
     }
@@ -112,7 +113,7 @@
             ]"
             @click="item.action()"
         >
-            <SvgIcon :name="item.icon" class="h-4 w-4" />
+            <AppIcon :name="item.icon" class="h-4 w-4" />
             <span>{{ item.label }}</span>
         </div>
     </div>

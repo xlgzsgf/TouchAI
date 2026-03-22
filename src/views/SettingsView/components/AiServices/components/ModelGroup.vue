@@ -1,7 +1,7 @@
 ﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { useConfirm } from '@composables/useConfirm';
     import type { Model } from '@database/schema';
     import { ref } from 'vue';
@@ -72,7 +72,7 @@
                 class="flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-gray-50"
                 @click="toggleExpand"
             >
-                <SvgIcon
+                <AppIcon
                     name="chevron-right"
                     :class="
                         isExpanded
@@ -93,7 +93,7 @@
                 title="删除分组"
                 @click="handleDeleteGroup(group.groupKey, group.models)"
             >
-                <SvgIcon name="trash" class="h-4 w-4" />
+                <AppIcon name="trash" class="h-4 w-4" />
             </button>
         </div>
 

@@ -3,7 +3,7 @@
   -->
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { useAlert } from '@composables/useAlert.ts';
     import { useContextMenu } from '@composables/useContextMenu.ts';
     import { useScrollbarStabilizer } from '@composables/useScrollbarStabilizer';
@@ -510,7 +510,7 @@
                                 title="编辑服务商"
                                 @click="handleEditProvider"
                             >
-                                <SvgIcon name="edit" class="h-5 w-5" />
+                                <AppIcon name="edit" class="h-5 w-5" />
                             </button>
                         </div>
                     </div>

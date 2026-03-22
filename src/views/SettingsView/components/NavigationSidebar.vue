@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
+    import type { AppIconName } from '@components/appIconMap';
 
     export type NavigationSection =
         | 'general'
@@ -11,7 +12,7 @@
 
     interface NavigationItem {
         id: NavigationSection;
-        icon: string;
+        icon: AppIconName;
         label: string;
     }
 
@@ -54,7 +55,7 @@
             :title="item.label"
             @click="handleNavigate(item.id)"
         >
-            <SvgIcon :name="item.icon" class="h-6 w-6" />
+            <AppIcon :name="item.icon" class="h-6 w-6" />
         </button>
     </div>
 </template>

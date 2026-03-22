@@ -5,7 +5,7 @@
         <div class="tool-approval-card__header">
             <div class="tool-approval-card__title-group">
                 <span class="tool-approval-card__icon">
-                    <SvgIcon name="exclamation-triangle" class="h-4 w-4" />
+                    <AppIcon name="exclamation-triangle" class="h-4 w-4" />
                 </span>
                 <span class="tool-approval-card__title">
                     {{ approval.title || '需要确认' }}
@@ -65,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
     import type { ToolApprovalInfo } from '@/types/conversation';

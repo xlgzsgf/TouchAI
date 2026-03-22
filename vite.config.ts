@@ -2,6 +2,7 @@ import { resolve } from 'node:path'
 
 import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
+import Icons from 'unplugin-icons/vite'
 import { defineConfig } from 'vite'
 import monacoEditorEsmPlugin from 'vite-plugin-monaco-editor-esm'
 
@@ -11,6 +12,9 @@ export default defineConfig({
   plugins: [
     monacoEditorEsmPlugin({
       languageWorkers: ['editorWorkerService'],
+    }),
+    Icons({
+      compiler: 'vue3',
     }),
     tailwindcss(),
     vue(),

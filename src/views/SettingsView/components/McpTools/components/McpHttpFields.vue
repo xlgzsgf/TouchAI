@@ -1,7 +1,7 @@
 ﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
 
     interface Props {
         url: string;
@@ -65,7 +65,7 @@
                     class="text-gray-400 transition-colors hover:text-gray-600"
                     @click="addHeader"
                 >
-                    <SvgIcon name="plus" class="h-5 w-5" />
+                    <AppIcon name="plus" class="h-5 w-5" />
                 </button>
             </div>
             <div v-if="headers.length > 0" class="mt-2 space-y-2">
@@ -90,7 +90,7 @@
                         class="text-gray-400 transition-colors hover:text-red-600"
                         @click="removeHeader(index)"
                     >
-                        <SvgIcon name="x" class="h-5 w-5" />
+                        <AppIcon name="x" class="h-5 w-5" />
                     </button>
                 </div>
             </div>

@@ -5,7 +5,7 @@
         <button type="button" class="tool-call-inline-trigger" @click="toggleSection">
             <div class="tool-call-inline-main">
                 <span class="tool-call-inline-icon">
-                    <SvgIcon name="tool" class="h-3.5 w-3.5" />
+                    <AppIcon name="tool" class="h-3.5 w-3.5" />
                 </span>
                 <span>{{ summaryText }}</span>
                 <span v-if="latestToolName" class="tool-call-inline-latest">
@@ -19,7 +19,7 @@
                 </span>
                 <span v-else-if="hasErrorTools" class="tool-call-inline-error">含错误</span>
                 <span v-else>已完成</span>
-                <SvgIcon
+                <AppIcon
                     name="chevron-right"
                     :class="
                         isExpanded
@@ -42,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { computed, ref, watch } from 'vue';
 
     import type { ToolCallInfo } from '@/types/conversation';

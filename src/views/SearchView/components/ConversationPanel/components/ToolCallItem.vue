@@ -9,7 +9,7 @@
             @click="toggleExpanded"
         >
             <div class="tool-call-main">
-                <SvgIcon name="wrench" class="tool-call-icon" />
+                <AppIcon name="wrench" class="tool-call-icon" />
                 <div class="tool-call-text">
                     <div class="tool-call-title-row">
                         <span class="tool-call-label">{{ toolDisplayName }}</span>
@@ -46,7 +46,7 @@
                 <span v-if="toolCall.durationMs" class="tool-call-duration">
                     {{ toolCall.durationMs }}ms
                 </span>
-                <SvgIcon
+                <AppIcon
                     name="chevron-right"
                     :class="
                         isExpanded ? 'tool-call-arrow tool-call-arrow--expanded' : 'tool-call-arrow'
@@ -72,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { computed, ref } from 'vue';
 
     import type { ToolCallInfo } from '@/types/conversation';
