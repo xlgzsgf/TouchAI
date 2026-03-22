@@ -3,6 +3,8 @@
 <script setup lang="ts">
     import { computed } from 'vue';
 
+    import { parseModelModalities, supportsImageModality } from '@/utils/modelSchemas';
+
     interface ModelCapabilitySource {
         reasoning?: number | null;
         tool_call?: number | null;
@@ -30,16 +32,9 @@
             result.push({ label: '工具', color: 'green' });
         }
         if (props.model.modalities) {
-            try {
-                const modalities = JSON.parse(props.model.modalities) as {
-                    input?: string[];
-                    output?: string[];
-                };
-                if (modalities.input?.includes('image') || modalities.output?.includes('image')) {
-                    result.push({ label: '多模态', color: 'purple' });
-                }
-            } catch {
-                // 忽略解析错误
+            const modalities = parseModelModalities(props.model.modalities);
+            if (supportsImageModality(modalities)) {
+                result.push({ label: '多模态', color: 'purple' });
             }
         }
         if (props.model.attachment === 1) {

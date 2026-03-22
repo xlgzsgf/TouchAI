@@ -8,6 +8,8 @@
     import type { Model } from '@database/schema';
     import { ref, watch } from 'vue';
 
+    import { parseModelModalities, supportsImageModality } from '@/utils/modelSchemas';
+
     interface Props {
         model: Model;
     }
@@ -34,13 +36,7 @@
 
     // 初始化多模态状态
     if (props.model.modalities) {
-        try {
-            const modalities = JSON.parse(props.model.modalities);
-            form.value.multimodal =
-                modalities.input?.includes('image') || modalities.output?.includes('image');
-        } catch {
-            // 忽略解析错误
-        }
+        form.value.multimodal = supportsImageModality(parseModelModalities(props.model.modalities));
     }
 
     // 监听 model 变化，更新表单
@@ -58,13 +54,9 @@
             };
 
             if (newModel.modalities) {
-                try {
-                    const modalities = JSON.parse(newModel.modalities);
-                    form.value.multimodal =
-                        modalities.input?.includes('image') || modalities.output?.includes('image');
-                } catch {
-                    // 忽略解析错误
-                }
+                form.value.multimodal = supportsImageModality(
+                    parseModelModalities(newModel.modalities)
+                );
             }
         }
     );
@@ -77,12 +69,8 @@
 
         try {
             // 检查用户是否修改了元数据
-            const originalModalities = props.model.modalities
-                ? JSON.parse(props.model.modalities)
-                : null;
-            const originalMultimodal = Boolean(
-                originalModalities?.input?.includes('image') ||
-                originalModalities?.output?.includes('image')
+            const originalMultimodal = supportsImageModality(
+                parseModelModalities(props.model.modalities)
             );
 
             const metadataChanged =
