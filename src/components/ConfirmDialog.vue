@@ -1,6 +1,8 @@
-<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
+﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
+    import AppIcon from '@components/AppIcon.vue';
+    import type { AppIconName } from '@components/appIconMap';
     import {
         AlertDialog,
         AlertDialogAction,
@@ -11,8 +13,6 @@
         AlertDialogHeader,
         AlertDialogTitle,
     } from '@components/ui/alert-dialog';
-
-    import SvgIcon from './SvgIcon.vue';
 
     interface Props {
         title?: string;
@@ -44,7 +44,7 @@
         emit('cancel');
     };
 
-    const iconName = () => {
+    const iconName = (): AppIconName => {
         switch (props.type) {
             case 'danger':
                 return 'exclamation-triangle';
@@ -84,7 +84,7 @@
                         'bg-blue-50': type === 'info',
                     }"
                 >
-                    <SvgIcon :name="iconName()" class="h-5 w-5" :class="iconColorClass()" />
+                    <AppIcon :name="iconName()" class="h-5 w-5" :class="iconColorClass()" />
                 </div>
 
                 <div class="flex-1">

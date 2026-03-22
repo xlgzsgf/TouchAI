@@ -1,7 +1,7 @@
 ﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
 
     interface Props {
         command: string;
@@ -83,7 +83,7 @@
             <div class="flex items-center justify-between">
                 <label class="block font-serif text-sm font-medium text-gray-600">参数</label>
                 <button class="text-gray-400 transition-colors hover:text-gray-600" @click="addArg">
-                    <SvgIcon name="plus" class="h-5 w-5" />
+                    <AppIcon name="plus" class="h-5 w-5" />
                 </button>
             </div>
             <div v-if="args.length > 0" class="mt-2 space-y-2">
@@ -100,7 +100,7 @@
                         class="text-gray-400 transition-colors hover:text-red-600"
                         @click="removeArg(index)"
                     >
-                        <SvgIcon name="x" class="h-5 w-5" />
+                        <AppIcon name="x" class="h-5 w-5" />
                     </button>
                 </div>
             </div>
@@ -122,7 +122,7 @@
             <div class="flex items-center justify-between">
                 <label class="block font-serif text-sm font-medium text-gray-600">环境变量</label>
                 <button class="text-gray-400 transition-colors hover:text-gray-600" @click="addEnv">
-                    <SvgIcon name="plus" class="h-5 w-5" />
+                    <AppIcon name="plus" class="h-5 w-5" />
                 </button>
             </div>
             <div v-if="env.length > 0" class="mt-2 space-y-2">
@@ -147,7 +147,7 @@
                         class="text-gray-400 transition-colors hover:text-red-600"
                         @click="removeEnv(index)"
                     >
-                        <SvgIcon name="x" class="h-5 w-5" />
+                        <AppIcon name="x" class="h-5 w-5" />
                     </button>
                 </div>
             </div>

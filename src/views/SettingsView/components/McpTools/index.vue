@@ -2,7 +2,7 @@
 
 <script setup lang="ts">
     import AlertMessage from '@components/AlertMessage.vue';
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { useContextMenu } from '@composables/useContextMenu.ts';
     import { useScrollbarStabilizer } from '@composables/useScrollbarStabilizer';
     import { deleteMcpServer, updateMcpServer } from '@database/queries';
@@ -370,7 +370,7 @@
         <div class="flex flex-1 flex-col overflow-hidden">
             <div v-if="!selectedServer" class="flex h-full items-center justify-center">
                 <div class="text-center">
-                    <SvgIcon name="mcp" class="mx-auto h-16 w-16 text-gray-300" />
+                    <AppIcon name="mcp" class="mx-auto h-16 w-16 text-gray-300" />
                     <p class="mt-4 font-serif text-sm text-gray-500">选择一个服务器查看详情</p>
                 </div>
             </div>

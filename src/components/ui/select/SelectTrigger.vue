@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { SelectIcon, SelectTrigger, type SelectTriggerProps, useForwardProps } from 'reka-ui';
     import type { HTMLAttributes } from 'vue';
     import { computed } from 'vue';
@@ -35,7 +35,7 @@
     >
         <slot />
         <SelectIcon as-child>
-            <SvgIcon
+            <AppIcon
                 name="chevron-down"
                 :class="cn('h-4 w-4 text-gray-500 transition-transform', props.iconClass)"
             />

@@ -67,14 +67,14 @@
                 class="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-lg transition-all hover:bg-gray-50 hover:shadow-xl"
                 @click="scrollToBottom"
             >
-                <SvgIcon name="arrow-down" class="h-5 w-5 text-gray-600" />
+                <AppIcon name="arrow-down" class="h-5 w-5 text-gray-600" />
             </button>
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { useScrollbarStabilizer } from '@composables/useScrollbarStabilizer';
     import { storeToRefs } from 'pinia';
     import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';

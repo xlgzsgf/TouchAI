@@ -3,8 +3,8 @@
 <script setup lang="ts">
     import ModelCapabilityTags from '@components/ModelCapabilityTags.vue';
     import ModelLogo from '@components/ModelLogo.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import SearchableSelect from '@components/SearchableSelect.vue';
-    import SvgIcon from '@components/SvgIcon.vue';
     import { findModelsWithProvider } from '@database/queries';
     import type { ModelWithProvider } from '@database/queries/models';
     import { computed, onMounted, ref, watch } from 'vue';
@@ -409,7 +409,7 @@
                     :disabled="loading || !nextAppendEntry"
                     @click="addModel"
                 >
-                    <SvgIcon name="plus" class="h-5 w-5" />
+                    <AppIcon name="plus" class="h-5 w-5" />
                 </button>
             </div>
 
@@ -598,7 +598,7 @@
                             class="flex-shrink-0 text-gray-400 transition-colors hover:text-red-600"
                             @click="removeModel(row.uid)"
                         >
-                            <SvgIcon name="x" class="h-5 w-5" />
+                            <AppIcon name="x" class="h-5 w-5" />
                         </button>
                     </div>
                 </div>

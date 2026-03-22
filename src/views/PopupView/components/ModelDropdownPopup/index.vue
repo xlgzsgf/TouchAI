@@ -1,9 +1,10 @@
 ﻿<!-- Copyright (c) 2026. Qian Cheng. Licensed under GPL v3 -->
 
 <script setup lang="ts">
+    import AppIcon from '@components/AppIcon.vue';
+    import type { AppIconName } from '@components/appIconMap';
     import ModelCapabilityTags from '@components/ModelCapabilityTags.vue';
     import ModelLogo from '@components/ModelLogo.vue';
-    import SvgIcon from '@components/SvgIcon.vue';
     import { AppEvent, eventService } from '@services/EventService';
     import type { ModelDropdownData, ModelDropdownPopupItem } from '@services/PopupService';
     import { computed, nextTick, ref, watch } from 'vue';
@@ -40,7 +41,7 @@
     // 模型列表由主窗口生成并透传，popup 只负责展示和交互。
     const models = computed<ModelDropdownPopupItem[]>(() => props.data?.models ?? []);
 
-    const emptyStateIcon = computed(() => {
+    const emptyStateIcon = computed<AppIconName>(() => {
         return searchQuery.value ? 'search' : 'database';
     });
 
@@ -242,7 +243,7 @@
             v-if="filteredModels.length === 0"
             class="flex min-h-[120px] flex-col items-center justify-center px-4"
         >
-            <SvgIcon :name="emptyStateIcon" class="mb-3 h-12 w-12 text-gray-300" />
+            <AppIcon :name="emptyStateIcon" class="mb-3 h-12 w-12 text-gray-300" />
             <p class="text-center text-sm text-gray-400">
                 {{ emptyStateMessage }}
             </p>

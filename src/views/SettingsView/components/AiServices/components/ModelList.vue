@@ -1,8 +1,7 @@
 ﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
-    import searchIcon from '@assets/icons/search.svg';
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { useAlert } from '@composables/useAlert';
     import type { Model, NewModel, Provider } from '@database/schema';
     import { computed, ref } from 'vue';
@@ -243,9 +242,8 @@
                 </h3>
 
                 <div class="relative flex-1">
-                    <img
-                        :src="searchIcon"
-                        alt="search"
+                    <AppIcon
+                        name="search"
                         class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400"
                     />
                     <input
@@ -270,7 +268,7 @@
                     @click="handleRefresh"
                 >
                     <span v-if="refreshing" class="inline-flex items-center gap-1.5">
-                        <SvgIcon name="refresh" class="h-4 w-4 animate-spin" />
+                        <AppIcon name="refresh" class="h-4 w-4 animate-spin" />
                         刷新中...
                     </span>
                     <span v-else>刷新</span>
@@ -289,7 +287,7 @@
             class="rounded-lg border border-gray-200 bg-white p-8 text-center"
         >
             <div class="mx-auto max-w-sm">
-                <img :src="searchIcon" alt="no results" class="mx-auto h-10 w-10 text-gray-300" />
+                <AppIcon name="search" class="mx-auto h-10 w-10 text-gray-300" />
                 <h3 class="mt-3 font-serif text-base font-medium text-gray-900">
                     未找到匹配的模型
                 </h3>
@@ -304,7 +302,7 @@
             class="rounded-lg border border-gray-200 bg-white p-8 text-center"
         >
             <div class="mx-auto max-w-sm">
-                <SvgIcon name="llm" class="mx-auto h-10 w-10 text-gray-300" />
+                <AppIcon name="llm" class="mx-auto h-10 w-10 text-gray-300" />
                 <h3 class="mt-3 font-serif text-base font-medium text-gray-900">暂无模型</h3>
                 <p class="mt-1 text-xs text-gray-500">
                     <template v-if="!provider?.api_endpoint">
@@ -322,7 +320,7 @@
                         :disabled="refreshing"
                         @click="handleRefresh"
                     >
-                        <SvgIcon
+                        <AppIcon
                             name="refresh"
                             :class="refreshing ? 'mr-1.5 h-4 w-4 animate-spin' : 'mr-1.5 h-4 w-4'"
                         />
@@ -332,7 +330,7 @@
                         class="inline-flex items-center rounded-lg border border-gray-200 px-4 py-2 font-serif text-sm font-medium text-gray-600 transition-colors hover:border-gray-300"
                         @click="startCreate"
                     >
-                        <SvgIcon name="plus" class="mr-1.5 h-4 w-4" />
+                        <AppIcon name="plus" class="mr-1.5 h-4 w-4" />
                         手动添加
                     </button>
                 </div>

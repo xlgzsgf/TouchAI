@@ -2,6 +2,7 @@
 
 <script setup lang="ts">
     import AlertMessage from '@components/AlertMessage.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { useScrollbarStabilizer } from '@composables/useScrollbarStabilizer';
     import { computed, onMounted, ref, watch } from 'vue';
 
@@ -197,7 +198,7 @@
                 class="flex flex-1 items-center justify-center px-6 text-center"
             >
                 <div class="max-w-md">
-                    <SvgIcon name="tool" class="mx-auto h-12 w-12 text-gray-300" />
+                    <AppIcon name="tool" class="mx-auto h-12 w-12 text-gray-300" />
                     <h3 class="mt-4 font-serif text-base font-semibold text-gray-900">
                         尚未发现可配置的内置工具
                     </h3>

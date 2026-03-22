@@ -1,9 +1,9 @@
 ﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
+    import AppIcon from '@components/AppIcon.vue';
     import ModelCapabilityTags from '@components/ModelCapabilityTags.vue';
     import ModelLogo from '@components/ModelLogo.vue';
-    import SvgIcon from '@components/SvgIcon.vue';
     import { useAlert } from '@composables/useAlert';
     import { useConfirm } from '@composables/useConfirm';
     import type { Model } from '@database/schema';
@@ -87,14 +87,14 @@
                     title="编辑"
                     @click="emit('edit')"
                 >
-                    <SvgIcon name="edit" class="h-4 w-4" />
+                    <AppIcon name="edit" class="h-4 w-4" />
                 </button>
                 <button
                     class="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
                     title="删除"
                     @click="handleDelete"
                 >
-                    <SvgIcon name="delete" class="h-4 w-4" />
+                    <AppIcon name="delete" class="h-4 w-4" />
                 </button>
             </div>
         </div>

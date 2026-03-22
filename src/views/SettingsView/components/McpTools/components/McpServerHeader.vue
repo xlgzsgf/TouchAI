@@ -1,7 +1,7 @@
 ﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { useMcpConnection } from '@composables/useMcpConnection';
     import type { McpServerEntity } from '@database/types';
     import { computed, onUnmounted, toRef } from 'vue';
@@ -87,7 +87,7 @@
     <div class="rounded-lg border border-gray-200 bg-white p-6">
         <div class="flex items-center gap-6">
             <div class="text-primary-600 flex items-center justify-center">
-                <SvgIcon name="mcp" class="h-10 w-10" />
+                <AppIcon name="mcp" class="h-10 w-10" />
             </div>
 
             <div class="flex-1">
@@ -144,7 +144,7 @@
                     ]"
                     @click="onConnect"
                 >
-                    <SvgIcon
+                    <AppIcon
                         name="play"
                         :class="isConnecting ? 'h-4 w-4 animate-spin' : 'h-4 w-4'"
                     />
@@ -159,7 +159,7 @@
                     ]"
                     @click="onDisconnect"
                 >
-                    <SvgIcon
+                    <AppIcon
                         name="stop"
                         :class="
                             isDisconnecting
@@ -179,7 +179,7 @@
                     ]"
                     @click="onReconnect"
                 >
-                    <SvgIcon
+                    <AppIcon
                         name="refresh"
                         :class="isReconnecting ? 'h-4 w-4 animate-spin' : 'h-4 w-4'"
                     />
@@ -190,7 +190,7 @@
                     disabled
                     class="flex cursor-not-allowed items-center gap-2 rounded-lg bg-yellow-500 px-4 py-2 font-serif text-sm text-white opacity-75"
                 >
-                    <SvgIcon name="play" class="h-4 w-4 animate-spin" />
+                    <AppIcon name="play" class="h-4 w-4 animate-spin" />
                     连接中...
                 </button>
             </div>
@@ -199,7 +199,7 @@
         <!-- 最近错误 -->
         <div v-if="serverError && status === 'error'" class="mt-4 rounded-lg bg-red-50 p-3">
             <div class="flex items-start gap-2">
-                <SvgIcon name="exclamation-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                <AppIcon name="exclamation-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
                 <div class="custom-scrollbar max-h-[7.5rem] min-w-0 flex-1 overflow-y-auto pr-1">
                     <p
                         class="font-mono text-xs leading-5 break-all whitespace-pre-wrap text-red-600"

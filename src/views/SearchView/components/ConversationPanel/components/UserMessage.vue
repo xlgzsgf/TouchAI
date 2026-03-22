@@ -26,7 +26,7 @@
                             v-else
                             class="inline-flex max-w-fit items-center gap-2 rounded border border-gray-200 bg-white p-2"
                         >
-                            <SvgIcon name="file" class="h-4 w-4 text-gray-500" />
+                            <AppIcon name="file" class="h-4 w-4 text-gray-500" />
                             <span class="text-sm text-gray-700">
                                 {{ attachment.name || 'File' }}
                             </span>
@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
 
     import type { ConversationMessage } from '@/types/conversation';
 

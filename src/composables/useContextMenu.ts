@@ -1,12 +1,13 @@
 ﻿// Copyright (c) 2026. 千诚. Licensed under GPL v3.
 
+import type { AppIconName } from '@components/appIconMap';
 import ContextMenuVue from '@components/ContextMenu.vue';
 import { type App, createApp, ref } from 'vue';
 
 export interface ContextMenuItem {
     key: string;
     label: string;
-    icon?: string;
+    icon?: AppIconName;
     danger?: boolean;
 }
 

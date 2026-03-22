@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { useAlert } from '@composables/useAlert';
     import { useConfirm } from '@composables/useConfirm';
     import { db } from '@database';
@@ -306,7 +306,7 @@
                     <div
                         class="bg-primary-50 text-primary-600 flex h-16 w-16 items-center justify-center rounded-lg"
                     >
-                        <SvgIcon name="database" class="h-6 w-6" />
+                        <AppIcon name="database" class="h-6 w-6" />
                     </div>
 
                     <div class="flex-1">

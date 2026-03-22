@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import { getCurrentWindow } from '@tauri-apps/api/window';
     import { ref } from 'vue';
 
@@ -109,7 +109,7 @@
                 @mousedown.stop
                 @click.stop="handleNewSession"
             >
-                <SvgIcon name="plus" class="h-4 w-4" />
+                <AppIcon name="plus" class="h-4 w-4" />
             </button>
 
             <div
@@ -132,7 +132,7 @@
                     @mouseenter="handleHistoryPrefetch"
                     @click.stop="toggleHistory"
                 >
-                    <SvgIcon name="history" class="h-4 w-4" />
+                    <AppIcon name="history" class="h-4 w-4" />
                 </button>
             </div>
 
@@ -146,7 +146,7 @@
                 @mousedown.stop
                 @click.stop="togglePinned"
             >
-                <SvgIcon
+                <AppIcon
                     name="pin"
                     class="h-4 w-4 transition-transform duration-200 ease-in-out"
                     :class="isPinned ? 'rotate-[-30deg]' : 'rotate-0'"

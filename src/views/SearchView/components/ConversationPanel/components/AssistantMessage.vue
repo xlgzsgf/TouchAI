@@ -17,7 +17,7 @@
                             class="flex w-full items-center gap-2 px-1 py-2 text-left text-sm font-normal text-gray-700 transition-colors hover:text-gray-900"
                             @click="toggleReasoning"
                         >
-                            <SvgIcon
+                            <AppIcon
                                 name="chevron-right"
                                 :class="
                                     isReasoningExpanded
@@ -86,14 +86,14 @@
                             aria-label="Copy message"
                             @click.stop="handleCopy"
                         >
-                            <SvgIcon name="copy" class="h-4 w-4" />
+                            <AppIcon name="copy" class="h-4 w-4" />
                         </button>
                         <button
                             class="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
                             aria-label="Regenerate response"
                             @click.stop="handleRegenerate"
                         >
-                            <SvgIcon name="refresh" class="h-4 w-4" />
+                            <AppIcon name="refresh" class="h-4 w-4" />
                         </button>
                     </div>
                 </template>
@@ -103,8 +103,8 @@
 </template>
 
 <script setup lang="ts">
+    import AppIcon from '@components/AppIcon.vue';
     import MarkdownContent from '@components/MarkdownContent.vue';
-    import SvgIcon from '@components/SvgIcon.vue';
     import { sendNotification } from '@tauri-apps/plugin-notification';
     import { computed, ref, watch } from 'vue';
 

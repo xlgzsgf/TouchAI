@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import ToolLogContent from '@components/ToolLogContent.vue';
     import { useListFilter } from '@composables/useListFilter';
     import { onMounted, ref, watch } from 'vue';
@@ -135,7 +135,7 @@
                         placeholder="搜索日志..."
                         class="focus:border-primary-400 w-full rounded-lg border border-gray-200 py-1.5 pr-3 pl-9 font-serif text-sm text-gray-900 transition-colors focus:outline-none"
                     />
-                    <SvgIcon
+                    <AppIcon
                         name="search"
                         class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400"
                     />
@@ -147,7 +147,7 @@
             </div>
 
             <div v-else-if="filteredLogs.length === 0" class="py-12 text-center">
-                <SvgIcon name="document-text" class="mx-auto h-16 w-16 text-gray-300" />
+                <AppIcon name="document-text" class="mx-auto h-16 w-16 text-gray-300" />
                 <p class="mt-4 font-serif text-sm text-gray-500">
                     {{ searchQuery ? '未找到匹配的日志' : '暂无日志' }}
                 </p>
@@ -186,7 +186,7 @@
                                 </div>
                             </div>
 
-                            <SvgIcon
+                            <AppIcon
                                 name="chevron-right"
                                 :class="
                                     expandedLogs.has(log.id)

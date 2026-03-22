@@ -12,7 +12,7 @@
             <label
                 class="history-search-field focus-within:border-primary-300 flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 transition-colors focus-within:bg-white"
             >
-                <SvgIcon name="search" class="h-3.5 w-3.5 text-stone-400" />
+                <AppIcon name="search" class="h-3.5 w-3.5 text-stone-400" />
                 <input
                     ref="searchInputRef"
                     :value="localSearchQuery"
@@ -39,7 +39,7 @@
                 v-else-if="groupedSessions.length === 0"
                 class="flex min-h-24 flex-col items-center justify-center gap-2 px-6 text-center"
             >
-                <SvgIcon name="history" class="h-7 w-7 text-stone-300" />
+                <AppIcon name="history" class="h-7 w-7 text-stone-300" />
                 <p class="font-serif text-xs text-stone-700">
                     {{ searchQuery.trim() ? '没有匹配的历史会话' : '还没有历史会话' }}
                 </p>
@@ -137,7 +137,7 @@
 </template>
 
 <script setup lang="ts">
-    import SvgIcon from '@components/SvgIcon.vue';
+    import AppIcon from '@components/AppIcon.vue';
     import type { SessionEntity } from '@database/types';
     import { AppEvent, eventService } from '@services/EventService';
     import type { SessionHistoryData } from '@services/PopupService';
