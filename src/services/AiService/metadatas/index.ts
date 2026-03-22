@@ -7,34 +7,35 @@ import { setStatistic } from '@database/queries/statistics.ts';
 import type { NewLlmMetadata } from '@database/schema.ts';
 import { StatisticKey } from '@database/schema.ts';
 
-/**
- * API 返回的原始数据格式
- */
-interface RawModelData {
-    [providerId: string]: {
-        models: {
-            [modelId: string]: {
-                id: string;
-                name: string;
-                attachment: boolean;
-                modalities: {
-                    input: string[];
-                    output: string[];
-                };
-                open_weights: boolean;
-                reasoning: boolean;
-                release_date?: string;
-                temperature: boolean;
-                tool_call: boolean;
-                knowledge?: string;
-                limit?: {
-                    context: number;
-                    output: number;
-                };
-            };
-        };
-    };
-}
+import {
+    modelLimitSchema,
+    modelModalitiesSchema,
+    parseModelLimit,
+    parseModelModalities,
+} from '@/utils/modelSchemas';
+import { z } from '@/utils/zod';
+
+const rawModelSchema = z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    attachment: z.boolean().catch(false),
+    modalities: modelModalitiesSchema.optional(),
+    open_weights: z.boolean().catch(false),
+    reasoning: z.boolean().catch(false),
+    release_date: z.string().optional(),
+    temperature: z.boolean().catch(false),
+    tool_call: z.boolean().catch(false),
+    knowledge: z.string().optional(),
+    limit: modelLimitSchema.optional(),
+});
+const rawModelDataSchema = z.record(
+    z.string(),
+    z.object({
+        models: z.record(z.string(), rawModelSchema),
+    })
+);
+
+type RawModelData = z.infer<typeof rawModelDataSchema>;
 
 /**
  * 合并两个元数据的能力字段
@@ -48,8 +49,8 @@ function mergeCapabilities(target: NewLlmMetadata, source: NewLlmMetadata): void
     target.tool_call = target.tool_call || source.tool_call ? 1 : 0;
 
     // 合并 modalities（取并集）
-    const targetModalities = target.modalities ? JSON.parse(target.modalities) : null;
-    const sourceModalities = source.modalities ? JSON.parse(source.modalities) : null;
+    const targetModalities = target.modalities ? parseModelModalities(target.modalities) : null;
+    const sourceModalities = source.modalities ? parseModelModalities(source.modalities) : null;
 
     if (targetModalities || sourceModalities) {
         const mergedInput = new Set<string>([
@@ -83,8 +84,8 @@ function mergeCapabilities(target: NewLlmMetadata, source: NewLlmMetadata): void
     if (!target.limit && source.limit) {
         target.limit = source.limit;
     } else if (target.limit && source.limit) {
-        const targetLimit = JSON.parse(target.limit) as { context?: number; output?: number };
-        const sourceLimit = JSON.parse(source.limit) as { context?: number; output?: number };
+        const targetLimit = parseModelLimit(target.limit);
+        const sourceLimit = parseModelLimit(source.limit);
         const mergedLimit = {
             context: Math.max(targetLimit.context || 0, sourceLimit.context || 0) || undefined,
             output: Math.max(targetLimit.output || 0, sourceLimit.output || 0) || undefined,
@@ -165,7 +166,7 @@ export async function updateModelMetadata(): Promise<void> {
         if (!response.ok) {
             throw new Error(`Failed to fetch metadata: ${response.statusText}`);
         }
-        const rawData: RawModelData = await response.json();
+        const rawData = rawModelDataSchema.parse(await response.json());
 
         // 2. 解析并合并同 model_id 的数据
         const metadataList = parseRawData(rawData);
