@@ -79,7 +79,17 @@ export const showWidgetRawArgsSchema = z.object({
 /**
  * 暴露给模型的 ShowWidget 工具说明。
  */
-export const SHOW_WIDGET_TOOL_DESCRIPTION = `CRITICAL STREAMING INSTRUCTION: Start widget_code IMMEDIATELY after the required boolean. The first characters of widget_code must already contain a visible root element (<svg>, <div>, <section>). Output visible structure first, metadata fields last. Use this tool to create live inline visual artifacts. TouchAI renders widgets as native DOM (not iframe) that streams progressively token-by-token. Before using this tool, call visualize_read_me with relevant modules (['diagram'], ['chart'], ['interactive'], ['mockup'], ['art']) and pass i_have_seen_read_me=true in the next round. Structure: CSS first (brief), visible HTML/SVG immediately, scripts last. Outputs using gradients, shadows, blur, glass effects, full-page HTML, iframe/object, or non-allowlisted external resources will be rejected. ${SHOW_WIDGET_STYLE_GUIDELINES}`;
+export const SHOW_WIDGET_TOOL_DESCRIPTION = [
+    'CRITICAL STREAMING INSTRUCTION: Start widget_code IMMEDIATELY after the required boolean.',
+    'The first characters of widget_code must already contain a visible root element (<svg>, <div>, <section>).',
+    'Output visible structure first, metadata fields last.',
+    'Use this tool to create live inline visual artifacts.',
+    'TouchAI renders widgets as native DOM (not iframe) that streams progressively token-by-token.',
+    "Before using this tool, call visualize_read_me with relevant modules (['diagram'], ['chart'], ['interactive'], ['mockup'], ['art']) and pass i_have_seen_read_me=true in the next round.",
+    'Structure: CSS first (brief), visible HTML/SVG immediately, scripts last.',
+    'Outputs using gradients, shadows, blur, glass effects, full-page HTML, iframe/object, or non-allowlisted external resources will be rejected.',
+    SHOW_WIDGET_STYLE_GUIDELINES,
+].join(' ');
 
 function withExamples(description: string, ...examples: string[]): string {
     return `${description} Examples: ${examples.join(' | ')}.`;
