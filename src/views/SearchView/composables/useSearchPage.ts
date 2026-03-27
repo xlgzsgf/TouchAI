@@ -108,6 +108,10 @@ export function useSearchPageController(options: {
         await searchBar.value?.prefetchModelDropdownData();
     }
 
+    function invalidateModelDropdownData() {
+        searchBar.value?.invalidateModelDropdownData();
+    }
+
     async function prepareModelDropdownOpen() {
         await searchBar.value?.prepareModelDropdownOpen();
     }
@@ -181,6 +185,7 @@ export function useSearchPageController(options: {
         focusSearchInput,
         loadActiveModel,
         prefetchModelDropdownData,
+        invalidateModelDropdownData,
         prepareModelDropdownOpen,
         resetModelDropdownState,
         selectModelFromDropdown,
@@ -289,6 +294,7 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
     let unlistenFocus: (() => void) | null = null;
     let unlistenBlur: (() => void) | null = null;
     let unlistenPopupFocusMain: (() => void) | null = null;
+    let unlistenAiModelsUpdated: (() => void) | null = null;
     let stopReadyWatch: (() => void) | null = null;
     let lastHideTime: number | null = null;
     let lifecycleInitialized = false;
@@ -396,6 +402,10 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
                 void controller.focusSearchInput();
             }, 50);
         });
+
+        unlistenAiModelsUpdated = await eventService.on(AppEvent.AI_MODELS_UPDATED, () => {
+            controller.invalidateModelDropdownData();
+        });
     }
 
     onMounted(() => {
@@ -428,6 +438,8 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
         unlistenBlur = null;
         unlistenPopupFocusMain?.();
         unlistenPopupFocusMain = null;
+        unlistenAiModelsUpdated?.();
+        unlistenAiModelsUpdated = null;
     });
 
     return {

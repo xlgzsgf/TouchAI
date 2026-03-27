@@ -27,6 +27,7 @@
     import type { Model, NewModel, NewProvider, Provider } from '@database/schema.ts';
     import { aiService } from '@services/AiService';
     import { updateModelMetadata } from '@services/AiService/metadatas';
+    import { AppEvent, eventService } from '@services/EventService';
     import { computed, onMounted, ref } from 'vue';
 
     defineOptions({
@@ -72,6 +73,12 @@
     const showEditDialog = ref(false);
     const refreshing = ref(false);
     const refreshingProviderId = ref<number | null>(null);
+
+    async function broadcastModelsUpdated() {
+        await eventService.emit(AppEvent.AI_MODELS_UPDATED, {
+            updatedAt: Date.now(),
+        });
+    }
 
     // 计算属性
     const selectedProvider = computed(() =>
@@ -257,6 +264,7 @@
             if (selectedProviderId.value) {
                 await loadModelsForProvider(selectedProviderId.value, true); // 强制刷新
             }
+            await broadcastModelsUpdated();
             alert.success('创建成功');
         } catch (err) {
             alert.error(err instanceof Error ? err.message : '创建失败');

@@ -613,6 +613,7 @@ export function useSearchInput(
         isModelDropdownOpen: modelSelection.isModelDropdownOpen,
         modelDropdownSearchQuery: modelSelection.dropdownSearchQuery,
         prefetchModelDropdownData: modelSelection.loadPopupModels,
+        invalidateModelDropdownData: modelSelection.invalidatePopupModels,
         prepareModelDropdownOpen: modelSelection.prepareModelDropdownOpen,
         resetModelDropdownState: modelSelection.resetModelDropdownState,
         selectModelFromDropdown: modelSelection.handleModelSelect,

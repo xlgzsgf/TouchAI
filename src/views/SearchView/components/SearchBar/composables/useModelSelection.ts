@@ -127,6 +127,11 @@ export function useModelSelection(
         return popupModelsLoadPromise;
     }
 
+    function invalidatePopupModels() {
+        hasLoadedPopupModels = false;
+        popupModelsLoadPromise = null;
+    }
+
     /**
      * 进入模型搜索状态，并确保弹窗候选模型可用。
      *
@@ -261,6 +266,7 @@ export function useModelSelection(
         dropdownSearchQuery: searchSession.dropdownSearchQuery,
         loadActiveModel,
         loadPopupModels,
+        invalidatePopupModels,
         prepareModelDropdownOpen,
         updateDropdownSearchQuery,
         resetModelDropdownState: searchSession.resetModelDropdownState,

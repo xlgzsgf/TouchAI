@@ -29,6 +29,7 @@ export enum AppEvent {
 
     // 设置事件
     SETTINGS_GENERAL_UPDATED = 'settings:general-updated',
+    AI_MODELS_UPDATED = 'ai-models:updated',
 
     // 窗口事件
     WINDOW_FOCUS = 'window:focus',
@@ -74,6 +75,10 @@ export interface SettingsGeneralUpdatedEvent {
     value: string | number | boolean;
 }
 
+export interface AiModelsUpdatedEvent {
+    updatedAt: number;
+}
+
 // ==================== 窗口事件 ====================
 
 export interface WindowFocusEvent {
@@ -105,6 +110,7 @@ export interface AppEventMap {
 
     // 设置事件
     [AppEvent.SETTINGS_GENERAL_UPDATED]: SettingsGeneralUpdatedEvent;
+    [AppEvent.AI_MODELS_UPDATED]: AiModelsUpdatedEvent;
 
     // 窗口事件
     [AppEvent.WINDOW_FOCUS]: WindowFocusEvent;

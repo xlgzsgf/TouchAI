@@ -7,7 +7,8 @@
     import SearchableSelect from '@components/SearchableSelect.vue';
     import { findModelsWithProvider } from '@database/queries';
     import type { ModelWithProvider } from '@database/queries/models';
-    import { computed, onMounted, ref, watch } from 'vue';
+    import { AppEvent, eventService } from '@services/EventService';
+    import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
     import type { SortableEvent } from 'vue-draggable-plus';
     import { VueDraggable } from 'vue-draggable-plus';
 
@@ -62,6 +63,7 @@
     const chainRows = ref<UpgradeModelChainRow[]>([]);
     const draggingRowUid = ref<string | null>(null);
     const lastAppliedChainJson = ref('');
+    let unlistenAiModelsUpdated: (() => void) | null = null;
 
     const buildUpgradeModelKey = (entry: UpgradeModelChainEntry): string =>
         `${entry.providerId}:${entry.modelId}`;
@@ -384,6 +386,12 @@
         }
     }
 
+    async function bindModelsUpdatedListener() {
+        unlistenAiModelsUpdated = await eventService.on(AppEvent.AI_MODELS_UPDATED, () => {
+            void loadModels();
+        });
+    }
+
     watch(
         () => getChainJson(props.modelValue.chain),
         () => {
@@ -394,6 +402,12 @@
 
     onMounted(() => {
         void loadModels();
+        void bindModelsUpdatedListener();
+    });
+
+    onUnmounted(() => {
+        unlistenAiModelsUpdated?.();
+        unlistenAiModelsUpdated = null;
     });
 </script>
 

@@ -101,6 +101,7 @@
         isModelDropdownOpen,
         modelDropdownSearchQuery,
         prefetchModelDropdownData,
+        invalidateModelDropdownData,
         prepareModelDropdownOpen,
         resetModelDropdownState,
         selectModelFromDropdown,
@@ -261,6 +262,7 @@
 
     defineExpose({
         prefetchModelDropdownData,
+        invalidateModelDropdownData,
         prepareModelDropdownOpen,
         resetModelDropdownState,
         selectModelFromDropdown,
