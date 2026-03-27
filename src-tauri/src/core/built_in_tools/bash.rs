@@ -15,6 +15,9 @@ use super::types::{BuiltInBashExecutionRequest, BuiltInBashExecutionResponse};
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 const DEFAULT_TIMEOUT_MS: u64 = 15_000;
 const MAX_TIMEOUT_MS: u64 = 120_000;
+#[cfg(target_os = "windows")]
+const UTF8_POWERSHELL_PRELUDE: &str =
+    "$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false);";
 
 /// 执行 PowerShell 非交互命令并返回结构化结果。
 ///
@@ -50,6 +53,7 @@ async fn execute_bash_windows(
         .timeout_ms
         .unwrap_or(DEFAULT_TIMEOUT_MS)
         .clamp(1, MAX_TIMEOUT_MS);
+    let command_script = build_powershell_command_script(trimmed_command);
 
     // 只启动一次受控的 PowerShell 子进程，并显式关闭配置文件加载与交互能力，
     // 避免用户本地命令环境配置把工具执行语义变成“因机器而异”。
@@ -61,7 +65,7 @@ async fn execute_bash_windows(
         .arg("-ExecutionPolicy")
         .arg("Bypass")
         .arg("-Command")
-        .arg(trimmed_command)
+        .arg(command_script)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -145,9 +149,14 @@ async fn execute_bash_windows(
     })
 }
 
+fn build_powershell_command_script(command: &str) -> String {
+    // 保持用户命令从新行开始，避免破坏 here-string 等必须行首起始的语法。
+    format!("{}\n{}", UTF8_POWERSHELL_PRELUDE, command)
+}
+
 /// 读取完整 stdout/stderr。
 ///
-/// 这里统一做宽松的 UTF-8 解码，因为命令输出编码不可完全信任；
+/// 这里先在子进程入口尽量把输出统一成 UTF-8，再在 Rust 侧做宽松解码；
 /// 对工具日志来说，“尽可能保留可读内容”比“遇到坏字节直接失败”更重要。
 async fn read_stream<R>(mut reader: R) -> Result<String, String>
 where
