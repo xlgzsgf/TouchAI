@@ -15,6 +15,7 @@
         label: string;
         value: T;
         description?: string;
+        iconSrc?: string;
     }
 
     interface Props {
@@ -70,7 +71,18 @@
             :icon-class="isOpen ? 'rotate-180' : ''"
             :disabled="disabled"
         >
-            <SelectValue :placeholder="selectedOption?.label || placeholder" />
+            <template v-if="selectedOption">
+                <div class="flex min-w-0 items-center gap-2">
+                    <img
+                        v-if="selectedOption.iconSrc"
+                        :src="selectedOption.iconSrc"
+                        :alt="selectedOption.label"
+                        class="h-4 w-4 shrink-0 rounded-sm object-contain"
+                    />
+                    <span class="line-clamp-1">{{ selectedOption.label }}</span>
+                </div>
+            </template>
+            <SelectValue v-else :placeholder="placeholder" />
         </SelectTrigger>
 
         <SelectContent
@@ -80,16 +92,26 @@
                 v-for="option in options"
                 :key="option.value"
                 :value="option.value"
-                class="flex w-full flex-col px-3 py-2 text-left text-sm transition-colors hover:bg-gray-100"
+                class="flex w-full px-3 py-2 text-left text-sm transition-colors hover:bg-gray-100"
                 :class="{
                     'bg-primary-50 text-primary-600': option.value === modelValue,
                     'text-gray-900': option.value !== modelValue,
                 }"
             >
-                <span class="font-serif font-medium">{{ option.label }}</span>
-                <span v-if="option.description" class="mt-0.5 text-xs text-gray-400">
-                    {{ option.description }}
-                </span>
+                <div class="flex min-w-0 items-center gap-2">
+                    <img
+                        v-if="option.iconSrc"
+                        :src="option.iconSrc"
+                        :alt="option.label"
+                        class="h-4 w-4 shrink-0 rounded-sm object-contain"
+                    />
+                    <div class="min-w-0">
+                        <span class="block font-serif font-medium">{{ option.label }}</span>
+                        <span v-if="option.description" class="mt-0.5 block text-xs text-gray-400">
+                            {{ option.description }}
+                        </span>
+                    </div>
+                </div>
             </SelectItem>
         </SelectContent>
     </Select>

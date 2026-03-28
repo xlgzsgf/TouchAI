@@ -431,7 +431,7 @@ class DatabaseBackupService {
                 ON source_session_providers.id = source_sessions.provider_id
             LEFT JOIN main.providers AS target_session_providers
                 ON target_session_providers.name = source_session_providers.name
-               AND target_session_providers.type = source_session_providers.type
+               AND target_session_providers.driver = source_session_providers.driver
             WHERE true
             ON CONFLICT(session_id) DO UPDATE SET
                 title = excluded.title,
@@ -532,7 +532,7 @@ class DatabaseBackupService {
                 ON source_providers.id = source_models.provider_id
             INNER JOIN main.providers AS target_providers
                 ON target_providers.name = source_providers.name
-               AND target_providers.type = source_providers.type
+               AND target_providers.driver = source_providers.driver
             INNER JOIN main.models AS target_models
                 ON target_models.provider_id = target_providers.id
                AND target_models.model_id = source_models.model_id
@@ -594,15 +594,21 @@ class DatabaseBackupService {
                 DELETE FROM main.statistics;
                 DELETE FROM main.llm_metadata;
 
-                INSERT INTO main.providers (id, name, type, api_endpoint, api_key, logo, enabled, is_builtin, created_at, updated_at)
-                SELECT id, name, type, api_endpoint, api_key, logo, enabled, is_builtin, created_at, updated_at
+                INSERT INTO main.providers (
+                    id, name, driver, api_endpoint, api_key, config_json, logo,
+                    enabled, is_builtin, created_at, updated_at
+                )
+                SELECT
+                    id, name, driver, api_endpoint, api_key, config_json, logo,
+                    enabled, is_builtin, created_at, updated_at
                 FROM imported.providers
                 WHERE true
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
-                    type = excluded.type,
+                    driver = excluded.driver,
                     api_endpoint = excluded.api_endpoint,
                     api_key = excluded.api_key,
+                    config_json = excluded.config_json,
                     logo = excluded.logo,
                     enabled = excluded.enabled,
                     is_builtin = excluded.is_builtin,

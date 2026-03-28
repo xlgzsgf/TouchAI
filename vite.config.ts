@@ -56,7 +56,13 @@ export default defineConfig({
         manualChunks: {
           'vendor-framework': ['vue', 'vue-router', 'pinia'],
           'vendor-ui': ['reka-ui', 'vue-sonner'],
-          'vendor-ai': ['openai', '@anthropic-ai/sdk'],
+          'vendor-ai': [
+            'ai',
+            '@ai-sdk/openai',
+            '@ai-sdk/anthropic',
+            '@ai-sdk/google',
+            '@ai-sdk/openai-compatible',
+          ],
           'vendor-markdown': ['markstream-vue', 'markdown-it-emoji'],
           'vendor-diagrams': ['mermaid', 'katex'],
           'vendor-monaco': ['monaco-editor'],

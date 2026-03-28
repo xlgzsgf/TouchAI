@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1af48067-9bc1-4616-a57a-2923fef15f8b",
+  "id": "727e8019-7480-49ff-8bee-91a3a7302d04",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "ai_requests": {
@@ -1269,8 +1269,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "type": {
-          "name": "type",
+        "driver": {
+          "name": "driver",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -1285,6 +1285,13 @@
         },
         "api_key": {
           "name": "api_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "config_json": {
+          "name": "config_json",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

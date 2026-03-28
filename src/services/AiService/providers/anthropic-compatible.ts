@@ -18,17 +18,18 @@ const anthropicStyleModelsSchema = z.object({
 });
 
 /**
- * Anthropic 官方适配器。
+ * Anthropic-compatible 适配器。
  */
-export class AnthropicProviderAdapter extends AiSdkProviderBase {
-    readonly name = 'Anthropic';
-    readonly driver = 'anthropic' as const;
+export class AnthropicCompatibleProviderAdapter extends AiSdkProviderBase {
+    readonly name = 'Anthropic Compatible';
+    readonly driver = 'anthropic-compatible' as const;
 
     private sdkProvider = createAnthropic({
         apiKey: this.apiKey,
         baseURL: this.getApiTargets().sdkBaseUrl || undefined,
         headers: this.getCustomHeaders(),
         fetch: this.fetch,
+        name: 'anthropic-compatible.messages',
     });
 
     protected createLanguageModel(modelId: string) {
@@ -65,12 +66,11 @@ export class AnthropicProviderAdapter extends AiSdkProviderBase {
             };
         }
 
-        const sdkBaseUrl = `${this.normalizedBaseUrl}/v1`;
         return {
             normalizedBaseUrl: this.normalizedBaseUrl,
-            sdkBaseUrl,
-            generationTarget: `${sdkBaseUrl}/messages`,
-            discoveryTarget: `${sdkBaseUrl}/models`,
+            sdkBaseUrl: this.normalizedBaseUrl,
+            generationTarget: `${this.normalizedBaseUrl}/messages`,
+            discoveryTarget: `${this.normalizedBaseUrl}/models`,
         };
     }
 }

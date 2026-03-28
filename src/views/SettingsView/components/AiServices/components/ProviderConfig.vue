@@ -1,9 +1,11 @@
-﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
+<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
     import PasswordInput from '@components/PasswordInput.vue';
     import type { Provider } from '@database/schema';
-    import { ref, watch } from 'vue';
+    import { aiService } from '@services/AiService';
+    import { getProviderDriverDefinition } from '@services/AiService/provider';
+    import { computed, ref, watch } from 'vue';
 
     interface Props {
         provider: Provider;
@@ -21,12 +23,34 @@
         api_key: props.provider.api_key || '',
     });
 
+    const driverDefinition = computed(() => getProviderDriverDefinition(props.provider.driver));
+
+    const apiTargets = computed(() =>
+        aiService
+            .createProviderInstance(
+                props.provider.driver,
+                form.value.api_endpoint,
+                form.value.api_key || undefined,
+                props.provider.config_json
+            )
+            .getApiTargets()
+    );
+
+    /**
+     * 目标 API 只做运行时预览，不参与存储。
+     * 这里仅展示最终的生成接口，避免把设置区做成多组“伪可编辑”地址。
+     */
+    const generationApiPreview = computed(() => apiTargets.value.generationTarget);
+
+    const shouldShowGenerationApiPreview = computed(
+        () => form.value.api_endpoint.trim().length > 0 && generationApiPreview.value.length > 0
+    );
+
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     watch(
         () => props.provider,
         (newProvider, oldProvider) => {
-            // 只有在切换到不同的服务商时才重置表单
             if (!oldProvider || newProvider.id !== oldProvider.id) {
                 form.value = {
                     api_endpoint: newProvider.api_endpoint,
@@ -36,7 +60,10 @@
         }
     );
 
-    // 防抖自动保存
+    /**
+     * 这里保留局部表单态并做防抖，
+     * 否则用户输入 base URL 时会和父层的数据库回写互相抖动。
+     */
     const handleInput = () => {
         if (debounceTimer) {
             clearTimeout(debounceTimer);
@@ -47,7 +74,7 @@
                 api_endpoint: form.value.api_endpoint,
                 api_key: form.value.api_key || null,
             });
-        }, 800); // 800ms 防抖延迟
+        }, 800);
     };
 </script>
 
@@ -59,24 +86,23 @@
             <div class="space-y-4">
                 <div>
                     <label class="block font-serif text-sm font-medium text-gray-600">
-                        API 地址 *
+                        Base URL *
                     </label>
                     <input
                         v-model="form.api_endpoint"
                         type="text"
                         class="focus:border-primary-400 mt-1.5 w-full rounded-lg border border-gray-200 px-3 py-2 font-serif text-sm text-gray-900 transition-colors focus:outline-none"
-                        placeholder="https://api.openai.com"
+                        :placeholder="driverDefinition.placeholder"
                         @input="handleInput"
                     />
-                    <p v-if="form.api_endpoint" class="mt-1 text-xs text-gray-400">
-                        预览：{{ form.api_endpoint
-                        }}{{
-                            provider.type === 'openai'
-                                ? '/v1/chat/completions'
-                                : provider.type === 'anthropic'
-                                  ? '/v1/messages'
-                                  : ''
-                        }}
+                    <p
+                        v-if="shouldShowGenerationApiPreview"
+                        class="mt-1 text-xs break-all text-gray-400"
+                    >
+                        根地址预览：
+                        <span class="font-mono">
+                            {{ generationApiPreview }}
+                        </span>
                     </p>
                 </div>
 

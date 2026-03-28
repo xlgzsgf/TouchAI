@@ -197,7 +197,7 @@
             label: model?.provider_name ?? `Provider #${row.providerId}`,
             description:
                 model?.provider_enabled === 0 ? '当前已选服务商未启用' : '当前已选服务商不可用',
-            searchText: `${model?.provider_name ?? ''} ${model?.provider_type ?? ''}`,
+            searchText: `${model?.provider_name ?? ''} ${model?.provider_driver ?? ''}`,
             providerLogo: model?.provider_logo,
             providerName: model?.provider_name,
         };
@@ -244,7 +244,7 @@
                 value: model.provider_id,
                 label: model.provider_name,
                 description: `${providerModels.length} 个可选模型`,
-                searchText: `${model.provider_name} ${model.provider_type}`,
+                searchText: `${model.provider_name} ${model.provider_driver}`,
                 providerLogo: model.provider_logo,
                 providerName: model.provider_name,
             });

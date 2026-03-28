@@ -1,57 +1,55 @@
 // Copyright (c) 2026. 千诚. Licensed under GPL v3
 
-import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { ProviderApiTargets } from '@services/AiService/types';
 
 import { z } from '@/utils/zod';
 
 import { AiSdkProviderBase } from './shared/ai-sdk-base';
 
-const anthropicStyleModelsSchema = z.object({
+const openAiStyleModelsSchema = z.object({
     data: z.array(
         z.object({
             id: z.string(),
-            display_name: z.string().optional(),
-            displayName: z.string().optional(),
         })
     ),
 });
 
 /**
- * Anthropic 官方适配器。
+ * Moonshot 官方适配器，走 OpenAI-compatible 传输。
  */
-export class AnthropicProviderAdapter extends AiSdkProviderBase {
-    readonly name = 'Anthropic';
-    readonly driver = 'anthropic' as const;
+export class MoonshotProviderAdapter extends AiSdkProviderBase {
+    readonly name = 'Moonshot';
+    readonly driver = 'moonshot' as const;
 
-    private sdkProvider = createAnthropic({
+    private sdkProvider = createOpenAICompatible({
+        name: 'moonshot',
         apiKey: this.apiKey,
-        baseURL: this.getApiTargets().sdkBaseUrl || undefined,
+        baseURL: this.getApiTargets().sdkBaseUrl,
         headers: this.getCustomHeaders(),
         fetch: this.fetch,
     });
 
     protected createLanguageModel(modelId: string) {
-        return this.sdkProvider.chat(modelId);
+        return this.sdkProvider.chatModel(modelId);
     }
 
     protected getDiscoveryHeaders(): Record<string, string> {
         return {
             ...(this.apiKey
                 ? {
-                      'x-api-key': this.apiKey,
+                      Authorization: `Bearer ${this.apiKey}`,
                   }
                 : {}),
-            'anthropic-version': '2023-06-01',
             ...this.getCustomHeaders(),
         };
     }
 
     protected parseModelList(payload: unknown) {
-        const parsed = anthropicStyleModelsSchema.parse(payload);
+        const parsed = openAiStyleModelsSchema.parse(payload);
         return parsed.data.map((model) => ({
             id: model.id,
-            name: model.display_name || model.displayName || model.id,
+            name: model.id,
         }));
     }
 
@@ -69,7 +67,7 @@ export class AnthropicProviderAdapter extends AiSdkProviderBase {
         return {
             normalizedBaseUrl: this.normalizedBaseUrl,
             sdkBaseUrl,
-            generationTarget: `${sdkBaseUrl}/messages`,
+            generationTarget: `${sdkBaseUrl}/chat/completions`,
             discoveryTarget: `${sdkBaseUrl}/models`,
         };
     }

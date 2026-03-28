@@ -36,9 +36,12 @@ export const modelWithProviderSelection = {
     output_limit: models.output_limit,
     is_custom_metadata: models.is_custom_metadata,
     provider_name: sql<string>`${providers.name}`.as('provider_name'),
-    provider_type: sql<ModelWithProvider['provider_type']>`${providers.type}`.as('provider_type'),
+    provider_driver: sql<ModelWithProvider['provider_driver']>`${providers.driver}`.as(
+        'provider_driver'
+    ),
     api_endpoint: sql<string>`${providers.api_endpoint}`.as('api_endpoint'),
     api_key: sql<string | null>`${providers.api_key}`.as('api_key'),
+    provider_config_json: sql<string | null>`${providers.config_json}`.as('provider_config_json'),
     provider_enabled: sql<number>`${providers.enabled}`.as('provider_enabled'),
     provider_logo: sql<string>`${providers.logo}`.as('provider_logo'),
 };

@@ -177,9 +177,10 @@ CREATE TABLE `models` (
 CREATE TABLE `providers` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`name` text NOT NULL,
-	`type` text NOT NULL,
+	`driver` text NOT NULL,
 	`api_endpoint` text NOT NULL,
 	`api_key` text,
+	`config_json` text,
 	`logo` text NOT NULL,
 	`enabled` integer DEFAULT 1 NOT NULL,
 	`is_builtin` integer DEFAULT 0 NOT NULL,

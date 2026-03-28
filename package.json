@@ -28,7 +28,10 @@
         "db:studio": "drizzle-kit studio"
     },
     "dependencies": {
-        "@anthropic-ai/sdk": "^0.71.2",
+        "@ai-sdk/anthropic": "^3.0.63",
+        "@ai-sdk/google": "^3.0.53",
+        "@ai-sdk/openai": "^3.0.48",
+        "@ai-sdk/openai-compatible": "^2.0.37",
         "@mozilla/readability": "^0.6.0",
         "@tailwindcss/vite": "^4.1.18",
         "@tauri-apps/api": "^2.8.0",
@@ -44,6 +47,7 @@
         "@tiptap/pm": "^3.20.1",
         "@tiptap/starter-kit": "^3.20.1",
         "@tiptap/vue-3": "^3.20.1",
+        "ai": "^6.0.136",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "drizzle-orm": "^0.45.1",
@@ -53,7 +57,6 @@
         "mermaid": "^11.12.3",
         "monaco-editor": "0.52.2",
         "morphdom": "^2.7.8",
-        "openai": "^6.16.0",
         "pinia": "^3.0.4",
         "reka-ui": "^2.8.2",
         "stream-monaco": "^0.0.18",

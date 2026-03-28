@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
+<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
     import CustomSelect from '@components/CustomSelect.vue';
@@ -6,8 +6,13 @@
     import { Button } from '@components/ui/button';
     import { Input } from '@components/ui/input';
     import { useAlert } from '@composables/useAlert';
-    import type { Provider, ProviderType } from '@database/schema';
-    import { ref, watch } from 'vue';
+    import type { Provider, ProviderDriver } from '@database/schema';
+    import { aiService } from '@services/AiService';
+    import {
+        getProviderDriverDefinition,
+        providerDriverDefinitions,
+    } from '@services/AiService/provider';
+    import { computed, ref, watch } from 'vue';
 
     interface Props {
         provider: Provider;
@@ -23,9 +28,20 @@
 
     const alert = useAlert();
 
+    const rawProviderLogos = import.meta.glob<{ default: string }>('@assets/logos/providers/*', {
+        eager: true,
+    });
+    const providerLogos: Record<string, string> = {};
+    for (const [path, mod] of Object.entries(rawProviderLogos)) {
+        const fileName = path.split('/').pop();
+        if (fileName && mod.default) {
+            providerLogos[fileName] = mod.default;
+        }
+    }
+
     const form = ref({
         name: props.provider.name,
-        type: props.provider.type,
+        driver: props.provider.driver,
         logo: props.provider.logo,
     });
 
@@ -34,25 +50,42 @@
         (newProvider) => {
             form.value = {
                 name: newProvider.name,
-                type: newProvider.type,
+                driver: newProvider.driver,
                 logo: newProvider.logo,
             };
         }
     );
 
-    const handleTypeChange = () => {
-        // 根据类型自动设置 logo
-        form.value.logo = form.value.type === 'openai' ? 'openai.png' : 'claude.png';
-    };
+    const selectedDriverDefinition = computed(() =>
+        getProviderDriverDefinition((form.value.driver as ProviderDriver) || 'openai')
+    );
 
-    const providerTypeOptions = [
-        { label: 'OpenAI', value: 'openai' as ProviderType, description: 'OpenAI 兼容 API' },
-        {
-            label: 'Anthropic',
-            value: 'anthropic' as ProviderType,
-            description: 'Anthropic Claude API',
-        },
-    ];
+    const driverOptions = providerDriverDefinitions.map((definition) => ({
+        label: definition.label,
+        value: definition.driver,
+        iconSrc: providerLogos[definition.logo] || '',
+    }));
+
+    const apiTargets = computed(() =>
+        aiService
+            .createProviderInstance(
+                (form.value.driver as ProviderDriver) || 'openai',
+                props.provider.api_endpoint,
+                props.provider.api_key || undefined,
+                props.provider.config_json
+            )
+            .getApiTargets()
+    );
+
+    const generationApiPreview = computed(() => apiTargets.value.generationTarget);
+
+    const shouldShowGenerationApiPreview = computed(
+        () => props.provider.api_endpoint.trim().length > 0 && generationApiPreview.value.length > 0
+    );
+
+    const handleDriverChange = () => {
+        form.value.logo = selectedDriverDefinition.value.logo;
+    };
 
     const handleSave = () => {
         if (!form.value.name) {
@@ -62,7 +95,7 @@
 
         emit('update', {
             name: form.value.name,
-            type: form.value.type as ProviderType,
+            driver: form.value.driver as ProviderDriver,
             logo: form.value.logo,
         });
     };
@@ -80,7 +113,7 @@
                 <Input
                     v-model="form.name"
                     class="mt-1.5 font-serif"
-                    placeholder="My Custom OpenAI"
+                    placeholder="My Custom Provider"
                 />
             </div>
 
@@ -89,12 +122,20 @@
                     服务商类型 *
                 </label>
                 <CustomSelect
-                    v-model="form.type"
-                    :options="providerTypeOptions"
+                    v-model="form.driver"
+                    :options="driverOptions"
                     class="mt-1.5"
-                    @update:model-value="handleTypeChange"
+                    @update:model-value="handleDriverChange"
                 />
-                <p class="mt-1 text-xs text-gray-400">选择 API 兼容类型，Logo 将自动设置</p>
+                <p
+                    v-if="shouldShowGenerationApiPreview"
+                    class="mt-1 text-xs break-all text-gray-400"
+                >
+                    根地址预览：
+                    <span class="font-mono">
+                        {{ generationApiPreview }}
+                    </span>
+                </p>
             </div>
         </div>
 

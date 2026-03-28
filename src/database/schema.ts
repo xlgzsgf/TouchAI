@@ -203,9 +203,21 @@ export const touchaiMeta = sqliteTable('touchai_meta', {
 export const providers = sqliteTable('providers', {
     id: integer('id').primaryKey({ autoIncrement: true }),
     name: text('name').notNull(),
-    type: text('type', { enum: ['openai', 'anthropic'] }).notNull(),
+    driver: text('driver', {
+        enum: [
+            'openai',
+            'anthropic',
+            'google',
+            'deepseek',
+            'xai',
+            'moonshot',
+            'openai-compatible',
+            'anthropic-compatible',
+        ],
+    }).notNull(),
     api_endpoint: text('api_endpoint').notNull(),
     api_key: text('api_key'),
+    config_json: text('config_json'),
     logo: text('logo').notNull(),
     enabled: integer('enabled').notNull().default(1),
     is_builtin: integer('is_builtin').notNull().default(0),
@@ -522,7 +534,7 @@ export type NewQuickSearchClickStat = typeof quickSearchClickStats.$inferInsert;
 export type QuickSearchClickStatUpdate = Partial<NewQuickSearchClickStat>;
 
 export type MessageRole = Message['role'];
-export type ProviderType = Provider['type'];
+export type ProviderDriver = Provider['driver'];
 export type RequestStatus = AiRequest['status'];
 export type TransportType = McpServer['transport_type'];
 export type ToolLogStatus = McpToolLog['status'];

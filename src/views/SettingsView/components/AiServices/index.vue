@@ -27,6 +27,7 @@
     import type { Model, NewModel, NewProvider, Provider } from '@database/schema.ts';
     import { aiService } from '@services/AiService';
     import { updateModelMetadata } from '@services/AiService/metadatas';
+    import { getProviderDriverDefinition } from '@services/AiService/provider';
     import { AppEvent, eventService } from '@services/EventService';
     import { computed, onMounted, ref } from 'vue';
 
@@ -83,6 +84,12 @@
     // 计算属性
     const selectedProvider = computed(() =>
         providers.value.find((p) => p.id === selectedProviderId.value)
+    );
+
+    const selectedProviderDriverLabel = computed(() =>
+        selectedProvider.value
+            ? getProviderDriverDefinition(selectedProvider.value.driver).label
+            : ''
     );
 
     const selectedProviderModels = computed(() => {
@@ -335,9 +342,10 @@
             // 如果有 API key 就直接用，没有就用占位符（部分厂商支持无key获取模型列表）
             const apiKey = provider.api_key || 'placeholder_for_models';
             const providerInstance = aiService.createProviderInstance(
-                provider.type,
+                provider.driver,
                 provider.api_endpoint,
-                apiKey
+                apiKey,
+                provider.config_json
             );
 
             let fetchedModels;
@@ -504,11 +512,7 @@
                                     <span
                                         class="bg-primary-50 text-primary-600 rounded-full px-2 py-0.5 text-xs font-medium"
                                     >
-                                        {{
-                                            selectedProvider.type === 'openai'
-                                                ? 'OpenAI'
-                                                : 'Anthropic'
-                                        }}
+                                        {{ selectedProviderDriverLabel }}
                                     </span>
                                 </div>
                             </div>

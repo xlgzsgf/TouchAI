@@ -8,19 +8,20 @@ import {
     updateModelLastUsed,
 } from '@database/queries';
 import type { ModelWithProvider } from '@database/queries/models';
-import type { ProviderType, ToolLogKind } from '@database/schema';
+import type { ProviderDriver, ToolLogKind } from '@database/schema';
 import type { AiRequestEntity } from '@database/types';
 import type { Index } from '@services/AiService/attachments';
 
 import { type BuiltInToolId, builtInToolService } from '@/services/BuiltInToolService';
 import { useSettingsStore } from '@/stores/settings';
-import { safeParseJsonWithSchema, z } from '@/utils/zod';
+import { z } from '@/utils/zod';
 
 import { AiError, AiErrorCode } from './errors';
 import { mcpManager } from './mcp';
 import { buildRequestMessages } from './messages';
 import { Persister } from './persister';
-import { createProviderFromRegistry, normalizeProviderEndpoint } from './provider';
+import { createProviderFromRegistry } from './provider';
+import { parseProviderConfigJson } from './providers/shared/ai-sdk-base';
 import type {
     AiMessage,
     AiProvider,
@@ -34,6 +35,94 @@ import type {
 const BUILT_IN_UPGRADE_TOOL_NAME = 'builtin__upgrade_model';
 const MAX_REQUEST_MODEL_SWITCHES = 4;
 const toolArgumentsSchema = z.record(z.string(), z.unknown());
+
+interface ProviderErrorDetails {
+    statusCode?: number;
+    url?: string;
+    responseBody?: unknown;
+    requestBodyValues?: unknown;
+    data?: unknown;
+}
+
+function isProviderErrorDetails(value: unknown): value is ProviderErrorDetails {
+    return !!value && typeof value === 'object';
+}
+
+/**
+ * 提取 provider SDK 错误里的关键诊断字段。
+ * Vercel AI SDK 的 APICallError 会把 responseBody / requestBodyValues 挂在错误对象上。
+ */
+function extractProviderErrorDetails(error: unknown): ProviderErrorDetails | null {
+    if (!isProviderErrorDetails(error)) {
+        return null;
+    }
+
+    const details: ProviderErrorDetails = {};
+
+    if (typeof error.statusCode === 'number') {
+        details.statusCode = error.statusCode;
+    }
+    if (typeof error.url === 'string') {
+        details.url = error.url;
+    }
+    if ('responseBody' in error) {
+        details.responseBody = error.responseBody;
+    }
+    if ('requestBodyValues' in error) {
+        details.requestBodyValues = error.requestBodyValues;
+    }
+    if ('data' in error) {
+        details.data = error.data;
+    }
+
+    return Object.keys(details).length > 0 ? details : null;
+}
+
+function formatToolArgumentsIssues(error: z.ZodError): string {
+    return error.issues
+        .map((issue) => {
+            const path =
+                issue.path.length > 0
+                    ? issue.path.map((segment) => String(segment)).join('.')
+                    : 'input';
+            return `- "${path}": ${issue.message}`;
+        })
+        .join('\n');
+}
+
+function parseToolCallArguments(toolCall: AiToolCall):
+    | {
+          ok: true;
+          toolArgs: Record<string, unknown>;
+      }
+    | {
+          ok: false;
+          errorResult: string;
+      } {
+    let parsedArguments: unknown;
+
+    try {
+        parsedArguments = JSON.parse(toolCall.arguments);
+    } catch {
+        return {
+            ok: false,
+            errorResult: `Tool argument protocol error: ${toolCall.name} returned invalid JSON arguments.`,
+        };
+    }
+
+    const result = toolArgumentsSchema.safeParse(parsedArguments);
+    if (!result.success) {
+        return {
+            ok: false,
+            errorResult: `Tool argument protocol error: ${toolCall.name} must receive a JSON object.\n${formatToolArgumentsIssues(result.error)}`,
+        };
+    }
+
+    return {
+        ok: true,
+        toolArgs: result.data,
+    };
+}
 
 export interface ExecuteRequestOptions {
     prompt: string;
@@ -111,14 +200,15 @@ export class AiServiceManager {
      * 创建服务商的 provider 实例（公共方法）
      */
     createProviderInstance(
-        providerType: ProviderType,
+        providerDriver: ProviderDriver,
         apiEndpoint: string,
-        apiKey?: string | null
+        apiKey?: string | null,
+        configJson?: string | null
     ): AiProvider {
-        const normalizedEndpoint = normalizeProviderEndpoint(providerType, apiEndpoint);
-        return createProviderFromRegistry(providerType, {
-            apiEndpoint: normalizedEndpoint,
+        return createProviderFromRegistry(providerDriver, {
+            apiEndpoint,
             apiKey: apiKey || undefined,
+            config: parseProviderConfigJson(configJson),
         });
     }
 
@@ -359,9 +449,10 @@ export class AiServiceManager {
 
             // 6. 创建首个 Provider 实例并解析可用工具
             let provider = this.createProviderInstance(
-                activeModel.provider_type as ProviderType,
+                activeModel.provider_driver as ProviderDriver,
                 activeModel.api_endpoint,
-                activeModel.api_key
+                activeModel.api_key,
+                activeModel.provider_config_json
             );
             let modelSwitchCount = 0;
             let tools = await this.resolveToolDefinitions(activeModel);
@@ -446,11 +537,28 @@ export class AiServiceManager {
                         throw new AiError(AiErrorCode.REQUEST_CANCELLED);
                     }
 
-                    const toolArgs = safeParseJsonWithSchema(
-                        toolArgumentsSchema,
-                        toolCall.arguments,
-                        {}
-                    );
+                    const parsedToolArguments = parseToolCallArguments(toolCall);
+                    if (!parsedToolArguments.ok) {
+                        this.emitToolEvent(onChunk, {
+                            type: 'call_end',
+                            callId: toolCall.id,
+                            result: parsedToolArguments.errorResult,
+                            isError: true,
+                            durationMs: 0,
+                            finalStatus: 'error',
+                        });
+
+                        return {
+                            toolCall,
+                            result: parsedToolArguments.errorResult,
+                            isError: true,
+                            toolLogId: null,
+                            toolLogKind: null,
+                            controlSignal: undefined,
+                        };
+                    }
+
+                    const { toolArgs } = parsedToolArguments;
 
                     const builtInResult = await builtInToolService.executeTool({
                         toolCall,
@@ -502,6 +610,7 @@ export class AiServiceManager {
                         content: result,
                         tool_call_id: toolCall.id,
                         name: toolCall.name,
+                        isError,
                     });
 
                     // 持久化工具结果消息
@@ -530,9 +639,10 @@ export class AiServiceManager {
                     modelSwitchCount += 1;
 
                     provider = this.createProviderInstance(
-                        activeModel.provider_type as ProviderType,
+                        activeModel.provider_driver as ProviderDriver,
                         activeModel.api_endpoint,
-                        activeModel.api_key
+                        activeModel.api_key,
+                        activeModel.provider_config_json
                     );
                     tools = await this.resolveToolDefinitions(activeModel, {
                         disableUpgradeModel: modelSwitchCount >= MAX_REQUEST_MODEL_SWITCHES,
@@ -584,6 +694,10 @@ export class AiServiceManager {
             };
         } catch (error) {
             console.warn('[AiServiceManager] Request failed:', error, typeof error);
+            const providerErrorDetails = extractProviderErrorDetails(error);
+            if (providerErrorDetails) {
+                console.warn('[AiServiceManager] Provider error details:', providerErrorDetails);
+            }
 
             const aiError = AiError.fromError(error);
 

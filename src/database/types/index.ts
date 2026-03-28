@@ -3,7 +3,7 @@
 import type {
     BuiltInToolLog,
     MessageRole,
-    ProviderType,
+    ProviderDriver,
     RequestStatus,
     SettingKey,
     StatisticKey,
@@ -18,7 +18,7 @@ export type SettingIdentifier = string | SettingKey;
 export type StatisticIdentifier = string | StatisticKey;
 
 export type DbMessageRole = MessageRole;
-export type DbProviderType = ProviderType;
+export type DbProviderDriver = ProviderDriver;
 export type DbRequestStatus = RequestStatus;
 export type DbTransportType = TransportType;
 export type DbToolLogStatus = ToolLogStatus;
@@ -143,9 +143,10 @@ export interface SettingEntity {
 export interface ProviderEntity {
     id: number;
     name: string;
-    type: DbProviderType;
+    driver: DbProviderDriver;
     api_endpoint: string;
     api_key: string | null;
+    config_json: string | null;
     logo: string;
     enabled: number;
     is_builtin: number;
@@ -155,9 +156,10 @@ export interface ProviderEntity {
 
 export interface ProviderCreateData {
     name: string;
-    type: DbProviderType;
+    driver: DbProviderDriver;
     api_endpoint: string;
     api_key?: string | null;
+    config_json?: string | null;
     logo: string;
     enabled?: number;
     is_builtin?: number;
@@ -243,9 +245,10 @@ export interface ModelWithProvider {
     output_limit: number | null;
     is_custom_metadata: number;
     provider_name: string;
-    provider_type: DbProviderType;
+    provider_driver: DbProviderDriver;
     api_endpoint: string;
     api_key: string | null;
+    provider_config_json: string | null;
     provider_enabled: number;
     provider_logo: string;
 }

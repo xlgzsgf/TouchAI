@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
+<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
     import CustomSelect from '@components/CustomSelect.vue';
@@ -7,8 +7,13 @@
     import { Button } from '@components/ui/button';
     import { Input } from '@components/ui/input';
     import { useAlert } from '@composables/useAlert';
-    import type { NewProvider, ProviderType } from '@database/schema';
-    import { ref } from 'vue';
+    import type { NewProvider, ProviderDriver } from '@database/schema';
+    import { aiService } from '@services/AiService';
+    import {
+        getProviderDriverDefinition,
+        providerDriverDefinitions,
+    } from '@services/AiService/provider';
+    import { computed, ref } from 'vue';
 
     interface Emits {
         (e: 'create', data: NewProvider): void;
@@ -19,41 +24,73 @@
 
     const alert = useAlert();
 
+    const rawProviderLogos = import.meta.glob<{ default: string }>('@assets/logos/providers/*', {
+        eager: true,
+    });
+    const providerLogos: Record<string, string> = {};
+    for (const [path, mod] of Object.entries(rawProviderLogos)) {
+        const fileName = path.split('/').pop();
+        if (fileName && mod.default) {
+            providerLogos[fileName] = mod.default;
+        }
+    }
+
     const form = ref<Partial<NewProvider>>({
         name: '',
-        type: 'openai' as ProviderType,
+        driver: 'openai' as ProviderDriver,
         api_endpoint: '',
         api_key: '',
-        logo: 'openai.png',
+        config_json: null,
+        logo: getProviderDriverDefinition('openai').logo,
         enabled: 1,
         is_builtin: 0,
     });
 
-    const handleTypeChange = () => {
-        // 根据类型自动设置 logo
-        form.value.logo = form.value.type === 'openai' ? 'openai.png' : 'claude.png';
-    };
+    const selectedDriverDefinition = computed(() =>
+        getProviderDriverDefinition((form.value.driver as ProviderDriver) || 'openai')
+    );
 
-    const providerTypeOptions = [
-        { label: 'OpenAI', value: 'openai' as ProviderType, description: 'OpenAI 兼容 API' },
-        {
-            label: 'Anthropic',
-            value: 'anthropic' as ProviderType,
-            description: 'Anthropic Claude API',
-        },
-    ];
+    const driverOptions = providerDriverDefinitions.map((definition) => ({
+        label: definition.label,
+        value: definition.driver,
+        iconSrc: providerLogos[definition.logo] || '',
+    }));
+
+    const apiTargets = computed(() =>
+        aiService
+            .createProviderInstance(
+                (form.value.driver as ProviderDriver) || 'openai',
+                form.value.api_endpoint || '',
+                form.value.api_key || undefined,
+                form.value.config_json || null
+            )
+            .getApiTargets()
+    );
+
+    const generationApiPreview = computed(() => apiTargets.value.generationTarget);
+
+    const shouldShowGenerationApiPreview = computed(
+        () =>
+            (form.value.api_endpoint?.trim().length || 0) > 0 &&
+            generationApiPreview.value.length > 0
+    );
+
+    const handleDriverChange = () => {
+        form.value.logo = selectedDriverDefinition.value.logo;
+    };
 
     const handleSave = () => {
         if (!form.value.name || !form.value.api_endpoint) {
-            alert.error('请填写服务商名称和 API 地址');
+            alert.error('请填写服务商名称和 Base URL');
             return;
         }
 
         emit('create', {
             name: form.value.name,
-            type: form.value.type as ProviderType,
+            driver: form.value.driver as ProviderDriver,
             api_endpoint: form.value.api_endpoint,
             api_key: form.value.api_key || null,
+            config_json: null,
             logo: form.value.logo!,
             enabled: form.value.enabled!,
             is_builtin: 0,
@@ -82,23 +119,28 @@
                     服务商类型 *
                 </label>
                 <CustomSelect
-                    v-model="form.type!"
-                    :options="providerTypeOptions"
+                    v-model="form.driver!"
+                    :options="driverOptions"
                     class="mt-1.5"
-                    @update:model-value="handleTypeChange"
+                    @update:model-value="handleDriverChange"
                 />
-                <p class="mt-1 text-xs text-gray-400">选择 API 兼容类型，Logo 将自动设置</p>
             </div>
 
             <div>
-                <label class="block font-serif text-sm font-medium text-gray-600">API 地址 *</label>
+                <label class="block font-serif text-sm font-medium text-gray-600">Base URL *</label>
                 <Input
                     v-model="form.api_endpoint"
                     class="mt-1.5 font-serif"
-                    placeholder="https://api.openai.com"
+                    :placeholder="selectedDriverDefinition.placeholder"
                 />
-                <p class="mt-1 text-xs text-gray-400">
-                    API 地址，只需要域名勿加/v1后缀，如https://api.openai.com
+                <p
+                    v-if="shouldShowGenerationApiPreview"
+                    class="mt-1 text-xs break-all text-gray-400"
+                >
+                    根地址预览：
+                    <span class="font-mono">
+                        {{ generationApiPreview }}
+                    </span>
                 </p>
             </div>
 

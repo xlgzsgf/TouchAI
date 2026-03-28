@@ -4,6 +4,8 @@
  * AI 服务类型定义
  */
 
+import type { ProviderDriver } from '@database/schema';
+
 /**
  * 单条消息内容在应用内部的统一片段表示。
  */
@@ -25,6 +27,7 @@ export interface AiMessage {
     // 工具结果消息：
     tool_call_id?: string;
     name?: string; // 工具结果对应的工具名
+    isError?: boolean; // 工具结果是否为失败/拒绝，供 provider 做协议级兼容
 }
 
 /**
@@ -61,9 +64,27 @@ export interface AiResponse {
     finishReason?: string;
 }
 
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+export interface JsonObject {
+    [key: string]: JsonValue | undefined;
+}
+
 export interface ModelInfo {
     id: string;
     name: string;
+}
+
+export interface ProviderConfigJson {
+    headers?: Record<string, string>;
+    queryParams?: Record<string, string>;
+}
+
+export interface ProviderApiTargets {
+    normalizedBaseUrl: string;
+    sdkBaseUrl: string;
+    generationTarget: string;
+    discoveryTarget: string;
 }
 
 /**
@@ -71,7 +92,7 @@ export interface ModelInfo {
  */
 export interface AiProvider {
     name: string;
-    type: 'openai' | 'anthropic';
+    driver: ProviderDriver;
 
     /**
      * 发送请求到 AI 提供商
@@ -92,11 +113,17 @@ export interface AiProvider {
      * 获取可用模型列表
      */
     listModels(): Promise<ModelInfo[]>;
+
+    /**
+     * 获取当前配置实际命中的 API 目标。
+     */
+    getApiTargets(): ProviderApiTargets;
 }
 
 export interface AiProviderConfig {
     apiEndpoint: string;
     apiKey?: string;
+    config?: ProviderConfigJson | null;
 }
 
 /**
@@ -120,6 +147,10 @@ export interface AiToolCall {
     id: string; // 模型返回的 tool_call_id
     name: string; // 模型返回的命名空间名称
     arguments: string; // JSON 字符串
+    /**
+     * 存储 provider 特殊数据。
+     */
+    providerOptions?: Record<string, JsonObject>;
 }
 
 /**
