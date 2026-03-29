@@ -1,12 +1,13 @@
 // Copyright (c) 2026. 千诚. Licensed under GPL v3
 
+import { findModelByProviderAndModelId } from '@database/queries';
 import type { ModelWithProvider } from '@database/queries/models';
-import { aiService } from '@services/AiService';
 import type { ToolApprovalRequest } from '@services/AiService/types';
 
 import {
     type BaseBuiltInToolExecutionContext,
     BuiltInTool,
+    type BuiltInToolConversationSemantic,
     type BuiltInToolExecutionResult,
     type BuiltInToolGroup,
 } from '../../types';
@@ -21,7 +22,12 @@ import {
     type UpgradeModelToolConfig,
 } from './config';
 import { UPGRADE_MODEL_TOOL_DESCRIPTION, UPGRADE_MODEL_TOOL_INPUT_SCHEMA } from './constants';
-import { buildUpgradeSummary, formatCurrentModelLabel, parseUpgradeModelArgs } from './helper';
+import {
+    buildUpgradeSummary,
+    formatCurrentModelLabel,
+    parseUpgradeModelArgs,
+    parseUpgradeTargetLabel,
+} from './helper';
 
 interface ResolvedUpgradeTarget {
     chainEntry: UpgradeModelChainEntry;
@@ -37,10 +43,13 @@ async function resolveChainTargets(
     const resolvedEntries = await Promise.all(
         chainEntries.map(async (chainEntry) => {
             try {
-                const model = await aiService.getModel({
+                const model = await findModelByProviderAndModelId({
                     providerId: chainEntry.providerId,
                     modelId: chainEntry.modelId,
                 });
+                if (!model || model.provider_enabled === 0) {
+                    throw new Error('Target model is unavailable');
+                }
                 return {
                     chainEntry,
                     model,
@@ -114,6 +123,13 @@ async function resolveUpgradeTarget(
     return {
         chainEntries,
         target,
+    };
+}
+
+function buildUpgradeConversationSemantic(targetLabel: string): BuiltInToolConversationSemantic {
+    return {
+        action: 'switch',
+        target: targetLabel,
     };
 }
 
@@ -219,6 +235,27 @@ class UpgradeModelTool extends BuiltInTool<UpgradeModelToolConfig> {
 
     override parseConfig(configJson: string | null): UpgradeModelToolConfig {
         return parseUpgradeModelToolConfig(configJson);
+    }
+
+    override buildConversationSemantic(args: Record<string, unknown>) {
+        void args;
+        return buildUpgradeConversationSemantic('高一级模型');
+    }
+
+    override async buildConversationSemanticWithContext(
+        args: Record<string, unknown>,
+        config: UpgradeModelToolConfig,
+        context: BaseBuiltInToolExecutionContext
+    ) {
+        parseUpgradeModelArgs(args);
+        const { target } = await resolveUpgradeTarget(context.currentModel, config);
+        return buildUpgradeConversationSemantic(formatCurrentModelLabel(target.model));
+    }
+
+    override buildConversationSemanticFromResult(result: string, args: Record<string, unknown>) {
+        void args;
+        const targetLabel = parseUpgradeTargetLabel(result);
+        return targetLabel ? buildUpgradeConversationSemantic(targetLabel) : null;
     }
 
     override buildApprovalRequest(

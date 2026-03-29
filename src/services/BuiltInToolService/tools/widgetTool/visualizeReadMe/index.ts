@@ -3,6 +3,7 @@
 import {
     type BaseBuiltInToolExecutionContext,
     BuiltInTool,
+    type BuiltInToolConversationSemantic,
     type BuiltInToolExecutionResult,
 } from '../../../types';
 import {
@@ -58,6 +59,15 @@ class VisualizeReadMeTool extends BuiltInTool<Record<string, never>> {
     readonly description = VISUALIZE_READ_ME_TOOL_DESCRIPTION;
     readonly inputSchema = VISUALIZE_READ_ME_TOOL_INPUT_SCHEMA;
     readonly defaultConfig = {};
+
+    override buildConversationSemantic(args: Record<string, unknown>) {
+        void args;
+        const semantic: BuiltInToolConversationSemantic = {
+            action: 'review',
+            target: '可视化规范',
+        };
+        return semantic;
+    }
 
     override execute(
         args: Record<string, unknown>,

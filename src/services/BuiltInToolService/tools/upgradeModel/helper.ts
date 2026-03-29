@@ -11,7 +11,8 @@ function formatModelLabel(model: {
     model_id: string;
     provider_name: string;
 }): string {
-    return `${model.provider_name} / ${model.name} (${model.model_id})`;
+    void model.model_id;
+    return `${model.provider_name} / ${model.name}`;
 }
 
 export function formatCurrentModelLabel(model?: ModelWithProvider): string {
@@ -30,6 +31,11 @@ export function buildUpgradeSummary(options: {
         `升级链: ${formatUpgradeModelChain(options.chainEntries)}`,
         '系统将直接切换到新模型，并沿当前上下文继续后续问答。',
     ].join('\n');
+}
+
+export function parseUpgradeTargetLabel(result?: string): string | null {
+    const matched = result?.match(/^目标模型:\s*(.+)$/m);
+    return matched?.[1]?.trim() || null;
 }
 
 export function parseUpgradeModelArgs(args: Record<string, unknown>): void {

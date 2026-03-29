@@ -31,6 +31,10 @@
         color: inherit;
     }
 
+    .touchai-markdown .paragraph-node {
+        margin: 0.7em 0;
+    }
+
     .touchai-markdown .paragraph-node:first-child {
         margin-top: 0;
     }

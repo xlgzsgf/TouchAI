@@ -3,6 +3,10 @@
 import type { Index } from '@services/AiService/attachments';
 import type { ToolExecutionSource as AiToolExecutionSource } from '@services/AiService/types';
 
+import type {
+    BuiltInToolConversationPresentation,
+    BuiltInToolConversationSemantic,
+} from '@/services/BuiltInToolService';
 import type { ShowWidgetPayload } from '@/services/BuiltInToolService/tools/widgetTool';
 
 /**
@@ -24,6 +28,8 @@ export interface ToolCallInfo {
     serverId?: number | null;
     sourceLabel?: string;
     arguments: Record<string, unknown>;
+    builtinConversationSemantic?: BuiltInToolConversationSemantic;
+    builtinPresentation?: BuiltInToolConversationPresentation;
     result?: string;
     isError?: boolean;
     status: 'executing' | 'awaiting_approval' | 'completed' | 'error' | 'rejected';

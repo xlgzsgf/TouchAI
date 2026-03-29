@@ -2,9 +2,12 @@
 
 import { createTauriFetch } from '@services/AiService/providers/shared/tauri-fetch';
 
+import { normalizeOptionalString, truncateText } from '@/utils/text';
+
 import {
     type BaseBuiltInToolExecutionContext,
     BuiltInTool,
+    type BuiltInToolConversationSemantic,
     type BuiltInToolExecutionResult,
     type BuiltInToolGroup,
 } from '../../types';
@@ -28,6 +31,31 @@ import {
 } from './helper';
 
 const tauriFetch = createTauriFetch();
+
+function formatWebFetchTarget(args: Record<string, unknown>): string {
+    const rawUrl = normalizeOptionalString(args.url, { collapseWhitespace: true });
+    if (!rawUrl) {
+        return '网页';
+    }
+
+    try {
+        const parsed = new URL(rawUrl);
+        const path = parsed.pathname === '/' ? '' : parsed.pathname;
+        const search = parsed.search || '';
+        return truncateText(`${parsed.hostname}${path}${search}`, 100);
+    } catch {
+        return truncateText(rawUrl, 100);
+    }
+}
+
+function buildWebFetchConversationSemantic(
+    args: Record<string, unknown>
+): BuiltInToolConversationSemantic {
+    return {
+        action: 'read',
+        target: formatWebFetchTarget(args),
+    };
+}
 
 /**
  * 执行网页抓取，并把响应规范化为可继续喂给模型的文本结果。
@@ -126,6 +154,10 @@ class WebFetchTool extends BuiltInTool<Record<string, never>> {
     readonly description = WEB_FETCH_TOOL_DESCRIPTION;
     readonly inputSchema = WEB_FETCH_TOOL_INPUT_SCHEMA;
     readonly defaultConfig = {};
+
+    override buildConversationSemantic(args: Record<string, unknown>) {
+        return buildWebFetchConversationSemantic(args);
+    }
 
     override execute(
         args: Record<string, unknown>,

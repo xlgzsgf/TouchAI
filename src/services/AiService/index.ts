@@ -14,6 +14,7 @@ import type { Index } from '@services/AiService/attachments';
 
 import { type BuiltInToolId, builtInToolService } from '@/services/BuiltInToolService';
 import { useSettingsStore } from '@/stores/settings';
+import { collapseWhitespace, truncateText } from '@/utils/text';
 import { z } from '@/utils/zod';
 
 import { AiError, AiErrorCode } from './errors';
@@ -35,6 +36,12 @@ import type {
 const BUILT_IN_UPGRADE_TOOL_NAME = 'builtin__upgrade_model';
 const MAX_REQUEST_MODEL_SWITCHES = 4;
 const toolArgumentsSchema = z.record(z.string(), z.unknown());
+const TOOL_DISCIPLINE_SYSTEM_PROMPT = [
+    '你可以使用本轮请求提供的工具。',
+    '当用户明确要求“调用工具”或要求执行某个必须依赖工具的动作时，必须实际发起对应工具调用，不能只用文字承诺自己会去做。',
+    '当用户要求升级模型、切换到更强模型、切到更高一级模型，且 `builtin__upgrade_model` 可用时，必须直接调用 `builtin__upgrade_model`，参数为 {}。',
+    '不要先输出“我来帮你升级模型”这类占位文本；应先调用工具，再基于工具结果继续回复。',
+].join('\n');
 
 interface ProviderErrorDetails {
     statusCode?: number;
@@ -426,6 +433,10 @@ export class AiServiceManager {
             attachments,
             supportsAttachments: initialModel.attachment === 1,
         });
+        messages.unshift({
+            role: 'system',
+            content: TOOL_DISCIPLINE_SYSTEM_PROMPT,
+        });
 
         // 3. 初始化持久化管理器
         const persister = new Persister({
@@ -726,16 +737,12 @@ export class AiServiceManager {
 }
 
 function buildSessionTitle(prompt: string): string {
-    const normalized = prompt.trim().replace(/\s+/g, ' ');
+    const normalized = collapseWhitespace(prompt);
     if (!normalized) {
         return '新会话';
     }
 
-    if (normalized.length <= 40) {
-        return normalized;
-    }
-
-    return `${normalized.slice(0, 40)}...`;
+    return truncateText(normalized, 40);
 }
 
 // 导出单例

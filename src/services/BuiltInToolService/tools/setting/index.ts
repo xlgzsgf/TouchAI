@@ -4,14 +4,17 @@ import type { ToolApprovalRequest } from '@services/AiService/types';
 import { native } from '@services/NativeService';
 
 import type { GeneralSettingsData } from '@/stores/settings';
+import { truncateText } from '@/utils/text';
 
 import {
     type BaseBuiltInToolExecutionContext,
     BuiltInTool,
+    type BuiltInToolConversationSemantic,
     type BuiltInToolExecutionResult,
     type BuiltInToolGroup,
 } from '../../types';
 import {
+    SETTING_DEFINITIONS,
     SETTING_TOOL_DESCRIPTION,
     SETTING_TOOL_INPUT_SCHEMA,
     type SupportedSettingKey,
@@ -32,6 +35,36 @@ import {
 interface AppliedSettingSnapshot {
     key: SupportedSettingKey;
     previousValue: SupportedSettingValue;
+}
+
+function joinSettingLabels(keys: SupportedSettingKey[]): string {
+    if (keys.length === 0) {
+        return '应用设置';
+    }
+
+    return truncateText(keys.map((key) => SETTING_DEFINITIONS[key].label).join('、'), 80);
+}
+
+function buildSettingConversationSemantic(
+    args: Record<string, unknown>
+): BuiltInToolConversationSemantic {
+    try {
+        const request = parseSettingRequest(args);
+        return {
+            action: request.action === 'set' ? 'update' : 'read',
+            target:
+                request.action === 'list'
+                    ? '可用设置'
+                    : request.action === 'get'
+                      ? joinSettingLabels(request.keys)
+                      : SETTING_DEFINITIONS[request.key].label,
+        };
+    } catch {
+        return {
+            action: 'process',
+            target: '应用设置',
+        };
+    }
 }
 
 async function applySettingSideEffect(
@@ -221,6 +254,10 @@ class SettingTool extends BuiltInTool<Record<string, never>> {
     readonly description = SETTING_TOOL_DESCRIPTION;
     readonly inputSchema = SETTING_TOOL_INPUT_SCHEMA;
     readonly defaultConfig = {};
+
+    override buildConversationSemantic(args: Record<string, unknown>) {
+        return buildSettingConversationSemantic(args);
+    }
 
     override buildApprovalRequest(args: Record<string, unknown>) {
         return buildSettingApprovalRequest(args);

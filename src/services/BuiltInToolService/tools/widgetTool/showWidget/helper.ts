@@ -2,6 +2,8 @@
 
 import type { ShowWidgetEventPayload, ShowWidgetMode } from '@services/AiService/types';
 
+import { normalizeString } from '@/utils/text';
+
 import type { BaseBuiltInToolExecutionContext } from '../../../types';
 import { parseToolArguments } from '../../../utils/toolSchema';
 import { MAX_WIDGET_HTML_CHARS, SHOW_WIDGET_TOOL_NAME, showWidgetRawArgsSchema } from './constants';
@@ -15,13 +17,10 @@ interface ShowWidgetArgs {
     html: string;
 }
 
-function normalizeStyleSnippet(value: string | null): string {
-    return (value || '').replace(/\s+/g, ' ').trim();
-}
-
 export function readExternalResourceUrl(element: Element): string {
-    return normalizeStyleSnippet(
-        element.getAttribute('src') || element.getAttribute('href') || element.getAttribute('data')
+    return normalizeString(
+        element.getAttribute('src') || element.getAttribute('href') || element.getAttribute('data'),
+        { collapseWhitespace: true }
     );
 }
 

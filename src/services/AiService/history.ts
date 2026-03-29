@@ -4,6 +4,10 @@ import type { MessageRow } from '@database/queries/messages';
 import { hydratePersistedAttachments } from '@services/AiService/attachments';
 
 import {
+    buildBuiltInToolConversationPresentation,
+    resolveBuiltInToolConversationSemantic,
+} from '@/services/BuiltInToolService/presentation';
+import {
     SHOW_WIDGET_TOOL_NAME,
     type ShowWidgetPayload,
 } from '@/services/BuiltInToolService/tools/widgetTool';
@@ -59,6 +63,35 @@ function parseToolArguments(raw: string | null): Record<string, unknown> {
     } catch {
         return {};
     }
+}
+
+function syncBuiltInToolCallPresentation(toolCall: ToolCallInfo): void {
+    if (toolCall.source !== 'builtin') {
+        delete toolCall.builtinConversationSemantic;
+        delete toolCall.builtinPresentation;
+        return;
+    }
+
+    if (!toolCall.builtinConversationSemantic && toolCall.result) {
+        toolCall.builtinConversationSemantic =
+            resolveBuiltInToolConversationSemantic(
+                toolCall.namespacedName || toolCall.name,
+                toolCall.arguments ?? {},
+                {
+                    result: toolCall.result,
+                }
+            ) ?? undefined;
+    }
+    toolCall.builtinPresentation =
+        buildBuiltInToolConversationPresentation(
+            toolCall.namespacedName || toolCall.name,
+            toolCall.arguments ?? {},
+            toolCall.status,
+            {
+                semantic: toolCall.builtinConversationSemantic,
+                result: toolCall.result,
+            }
+        ) ?? undefined;
 }
 
 function buildPersistedShowWidgetPayload(toolCall: ToolCallInfo): ShowWidgetPayload | null {
@@ -148,6 +181,7 @@ async function buildPersistedEntries(
                 arguments: parseToolArguments(row.tool_input),
                 status: 'executing',
             };
+            syncBuiltInToolCallPresentation(toolCall);
             currentEntry.toolCalls = [...(currentEntry.toolCalls ?? []), toolCall];
         }
 
@@ -432,6 +466,7 @@ function convertEntriesToConversationHistory(
                 toolCall.status = entry.toolResult.status;
                 toolCall.isError = entry.toolResult.isError;
                 toolCall.durationMs = entry.toolResult.durationMs;
+                syncBuiltInToolCallPresentation(toolCall);
                 if (toolCall.namespacedName === SHOW_WIDGET_TOOL_NAME) {
                     const payload = buildPersistedShowWidgetPayload(toolCall);
                     if (entry.toolResult.isError) {

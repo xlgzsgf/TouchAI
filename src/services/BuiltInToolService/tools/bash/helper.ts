@@ -1,8 +1,11 @@
 // Copyright (c) 2026. 千诚. Licensed under GPL v3
 
+import type { BuiltInBashExecutionResponse } from '@services/NativeService';
+
 import { parseToolArguments, parseToolConfigJson } from '../../utils/toolSchema';
 import {
     BASH_TOOL_NAME,
+    type BashCommandContext,
     bashCommandContextSchema,
     type BashToolConfig,
     bashToolConfigSchema,
@@ -63,4 +66,69 @@ export function truncateOutput(output: string, maxLength: number): string {
         return output;
     }
     return `${output.slice(0, maxLength)}\n\n[输出已截断，共 ${output.length} 个字符]`;
+}
+
+export interface ParsedBashToolResult {
+    shell: string | null;
+    duration: string | null;
+    output: string | null;
+}
+
+export function formatBashToolResult(
+    response: BuiltInBashExecutionResponse,
+    commandContext: BashCommandContext,
+    maxOutputChars: number
+): string {
+    const header = [
+        `Shell: ${response.shell}`,
+        `Working directory: ${commandContext.workingDirectory}`,
+        `Exit code: ${response.exitCode ?? 'none'}`,
+        `Duration: ${response.durationMs}ms`,
+    ].join('\n');
+    const output = truncateOutput(response.combinedOutput.trim(), maxOutputChars);
+
+    return [header, '', output || '[命令无输出]'].join('\n');
+}
+
+export function parseBashToolResult(result?: string): ParsedBashToolResult {
+    const raw = result?.trim();
+    if (!raw) {
+        return {
+            shell: null,
+            duration: null,
+            output: null,
+        };
+    }
+
+    const normalized = raw.replace(/\r\n/g, '\n');
+    const splitIndex = normalized.indexOf('\n\n');
+    const headerText = splitIndex >= 0 ? normalized.slice(0, splitIndex) : normalized;
+    const outputText = splitIndex >= 0 ? normalized.slice(splitIndex + 2).trim() : null;
+    const headerLines = headerText.split('\n');
+    const meta: ParsedBashToolResult = {
+        shell: null,
+        duration: null,
+        output: outputText,
+    };
+    let matchedHeader = false;
+
+    for (const line of headerLines) {
+        if (line.startsWith('Shell: ')) {
+            meta.shell = line.slice('Shell: '.length).trim() || null;
+            matchedHeader = true;
+            continue;
+        }
+
+        if (line.startsWith('Duration: ')) {
+            const value = line.slice('Duration: '.length).trim();
+            meta.duration = value || null;
+            matchedHeader = true;
+        }
+    }
+
+    if (!matchedHeader) {
+        meta.output = normalized;
+    }
+
+    return meta;
 }

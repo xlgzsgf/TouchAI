@@ -2,14 +2,27 @@
 
 import { native } from '@services/NativeService';
 
+import { normalizeOptionalString, truncateText } from '@/utils/text';
+
 import {
     type BaseBuiltInToolExecutionContext,
     BuiltInTool,
+    type BuiltInToolConversationSemantic,
     type BuiltInToolExecutionResult,
     type BuiltInToolGroup,
 } from '../../types';
 import { FILE_SEARCH_TOOL_DESCRIPTION, FILE_SEARCH_TOOL_INPUT_SCHEMA } from './constants';
 import { buildEverythingQuery, formatFileSearchResult } from './helper';
+
+function buildFileSearchConversationSemantic(
+    args: Record<string, unknown>
+): BuiltInToolConversationSemantic {
+    const query = normalizeOptionalString(args.query, { collapseWhitespace: true });
+    return {
+        action: 'search',
+        target: query && query !== '*' ? truncateText(query, 80) : '本机文件',
+    };
+}
 
 /**
  * 执行 Everything 文件搜索，并把结果整理成稳定文本格式。
@@ -75,6 +88,10 @@ class FileSearchTool extends BuiltInTool<Record<string, never>> {
     readonly description = FILE_SEARCH_TOOL_DESCRIPTION;
     readonly inputSchema = FILE_SEARCH_TOOL_INPUT_SCHEMA;
     readonly defaultConfig = {};
+
+    override buildConversationSemantic(args: Record<string, unknown>) {
+        return buildFileSearchConversationSemantic(args);
+    }
 
     override execute(
         args: Record<string, unknown>,

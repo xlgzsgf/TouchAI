@@ -21,6 +21,7 @@ import { builtInToolRegistry } from './registry';
 import type {
     BaseBuiltInToolExecutionContext,
     BuiltInToolControlSignal,
+    BuiltInToolConversationSemantic,
     BuiltInToolExecutionResult,
     BuiltInToolId,
     ResolvedBuiltInToolCall,
@@ -131,6 +132,26 @@ class BuiltInToolService {
         );
     }
 
+    async buildConversationSemantic(
+        resolved: ResolvedBuiltInToolCall,
+        args: Record<string, unknown>,
+        context: BaseBuiltInToolExecutionContext
+    ): Promise<BuiltInToolConversationSemantic> {
+        try {
+            return await resolved.tool.buildConversationSemanticWithContext(
+                args,
+                resolved.config,
+                context
+            );
+        } catch (error) {
+            console.warn(
+                `[BuiltInToolService] Failed to build runtime conversation semantic: ${resolved.namespacedName}`,
+                error
+            );
+            return resolved.tool.buildConversationSemantic(args);
+        }
+    }
+
     /**
      * 执行具体工具，并回写最后使用时间。
      *
@@ -173,6 +194,11 @@ class BuiltInToolService {
         };
 
         const callStartTime = Date.now();
+        const conversationSemantic = await this.buildConversationSemantic(
+            resolved,
+            options.toolArgs,
+            executionContext
+        );
         // `call_start` 要尽早发给 UI，前端可展示工具调用开始了
         options.emitToolEvent({
             type: 'call_start',
@@ -182,6 +208,7 @@ class BuiltInToolService {
             source: 'builtin',
             sourceLabel: '内置工具',
             arguments: options.toolArgs,
+            builtinConversationSemantic: conversationSemantic,
         });
 
         let toolLogId: number | null = null;

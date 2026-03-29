@@ -199,6 +199,22 @@ export interface ToolEventModelSummary {
     modelName: string;
 }
 
+export type ToolEventBuiltInConversationSemanticAction =
+    | 'process'
+    | 'run'
+    | 'search'
+    | 'read'
+    | 'review'
+    | 'update'
+    | 'switch'
+    | 'render'
+    | 'remove';
+
+export interface ToolEventBuiltInConversationSemantic {
+    action: ToolEventBuiltInConversationSemanticAction;
+    target?: string;
+}
+
 export type ShowWidgetMode = 'render' | 'remove';
 export type ShowWidgetPhase = 'draft' | 'ready';
 
@@ -228,6 +244,7 @@ export type ToolEvent =
           serverId?: number | null;
           sourceLabel?: string;
           arguments: Record<string, unknown>;
+          builtinConversationSemantic?: ToolEventBuiltInConversationSemantic;
       }
     | {
           type: 'call_end';

@@ -2,9 +2,12 @@
 
 import type { ShowWidgetEventPayload } from '@services/AiService/types';
 
+import { normalizeOptionalString, truncateText } from '@/utils/text';
+
 import {
     type BaseBuiltInToolExecutionContext,
     BuiltInTool,
+    type BuiltInToolConversationSemantic,
     type BuiltInToolExecutionResult,
 } from '../../../types';
 import {
@@ -16,6 +19,21 @@ import {
 import { buildShowWidgetSummary, parseShowWidgetArgs, readExternalResourceUrl } from './helper';
 import { isShowWidgetResourceUrlAllowed } from './runtime';
 import { SHOW_WIDGET_ALLOWED_RESOURCE_HOSTS } from './runtimeConstants';
+
+function buildShowWidgetConversationSemantic(
+    args: Record<string, unknown>
+): BuiltInToolConversationSemantic {
+    const mode = args.mode === 'remove' ? 'remove' : 'render';
+    return {
+        action: mode === 'remove' ? 'remove' : 'render',
+        target: truncateText(
+            normalizeOptionalString(args.title, { collapseWhitespace: true }) ||
+                normalizeOptionalString(args.widgetId, { collapseWhitespace: true }) ||
+                '可视化',
+            80
+        ),
+    };
+}
 
 /**
  * 简化后的校验只保留“必须禁止”的硬规则。
@@ -125,6 +143,10 @@ class ShowWidgetTool extends BuiltInTool<Record<string, never>> {
     readonly description = SHOW_WIDGET_TOOL_DESCRIPTION;
     readonly inputSchema = SHOW_WIDGET_TOOL_INPUT_SCHEMA;
     readonly defaultConfig = {};
+
+    override buildConversationSemantic(args: Record<string, unknown>) {
+        return buildShowWidgetConversationSemantic(args);
+    }
 
     override execute(
         args: Record<string, unknown>,

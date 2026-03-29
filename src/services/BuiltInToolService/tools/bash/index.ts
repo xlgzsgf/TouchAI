@@ -3,9 +3,12 @@
 import type { ToolApprovalRequest } from '@services/AiService/types';
 import { native } from '@services/NativeService';
 
+import { normalizeOptionalString, truncateText } from '@/utils/text';
+
 import {
     type BaseBuiltInToolExecutionContext,
     BuiltInTool,
+    type BuiltInToolConversationSemantic,
     type BuiltInToolExecutionResult,
     type BuiltInToolGroup,
 } from '../../types';
@@ -22,7 +25,19 @@ import {
     type FormattedBashExecution,
     HIGH_RISK_RULES,
 } from './constants';
-import { parseBashToolConfig, resolveCommandContext, truncateOutput } from './helper';
+import { formatBashToolResult, parseBashToolConfig, resolveCommandContext } from './helper';
+
+function buildBashConversationSemantic(
+    args: Record<string, unknown>
+): BuiltInToolConversationSemantic {
+    return {
+        action: 'run',
+        target: truncateText(
+            normalizeOptionalString(args.command, { collapseWhitespace: true }) || '命令',
+            120
+        ),
+    };
+}
 
 /**
  * 根据审批策略和命令内容决定是否请求用户同意。
@@ -92,14 +107,8 @@ export async function executeBashTool(
 
     void context.signal;
 
-    const header = [
-        `Shell: ${response.shell}`,
-        `Working directory: ${commandContext.workingDirectory}`,
-        `Exit code: ${response.exitCode ?? 'none'}`,
-        `Duration: ${response.durationMs}ms`,
-    ].join('\n');
-    const output = truncateOutput(response.combinedOutput.trim(), config.maxOutputChars);
-    const result = [header, '', output || '[命令无输出]'].join('\n');
+    const output = response.combinedOutput.trim();
+    const result = formatBashToolResult(response, commandContext, config.maxOutputChars);
 
     if (response.timedOut) {
         return {
@@ -144,6 +153,10 @@ class BashTool extends BuiltInTool<BashToolConfig> {
         return createBashApprovalRequest(args, config);
     }
 
+    override buildConversationSemantic(args: Record<string, unknown>) {
+        return buildBashConversationSemantic(args);
+    }
+
     override execute(
         args: Record<string, unknown>,
         config: BashToolConfig,
@@ -157,5 +170,5 @@ export const bashTool = new BashTool();
 export const builtInTools: BuiltInToolGroup = [bashTool];
 
 export { DEFAULT_BASH_TOOL_CONFIG } from './constants';
-export { parseBashToolConfig } from './helper';
+export { parseBashToolConfig, parseBashToolResult } from './helper';
 export type { BashApprovalMode, BashCommandContext, BashToolConfig, FormattedBashExecution };

@@ -2,7 +2,13 @@
 
 import type { ModelWithProvider } from '@database/queries/models';
 import type { BuiltInToolEntity } from '@database/types';
-import type { AiToolDefinition, ToolApprovalRequest, ToolEvent } from '@services/AiService/types';
+import type {
+    AiToolDefinition,
+    ToolApprovalRequest,
+    ToolEvent,
+    ToolEventBuiltInConversationSemantic,
+    ToolEventBuiltInConversationSemanticAction,
+} from '@services/AiService/types';
 
 /**
  * 当前内置工具体系允许暴露给模型的稳定工具标识。
@@ -56,6 +62,22 @@ export interface BuiltInToolExecutionResult {
     controlSignal?: BuiltInToolControlSignal;
 }
 
+export type BuiltInToolConversationStatus =
+    | 'executing'
+    | 'awaiting_approval'
+    | 'completed'
+    | 'error'
+    | 'rejected';
+
+export type BuiltInToolConversationSemanticAction = ToolEventBuiltInConversationSemanticAction;
+
+export type BuiltInToolConversationSemantic = ToolEventBuiltInConversationSemantic;
+
+export interface BuiltInToolConversationPresentation {
+    verb: string;
+    content?: string;
+}
+
 /**
  * 单个内置工具的静态描述与执行入口。
  */
@@ -103,6 +125,33 @@ export abstract class BuiltInTool<
         void config;
         void namespacedName;
         void context;
+        return null;
+    }
+
+    buildConversationSemantic(args: Record<string, unknown>): BuiltInToolConversationSemantic {
+        void args;
+        return {
+            action: 'process',
+            target: this.displayName,
+        };
+    }
+
+    buildConversationSemanticWithContext(
+        args: Record<string, unknown>,
+        config: TConfig,
+        context: TContext
+    ): BuiltInToolConversationSemantic | Promise<BuiltInToolConversationSemantic> {
+        void config;
+        void context;
+        return this.buildConversationSemantic(args);
+    }
+
+    buildConversationSemanticFromResult(
+        result: string,
+        args: Record<string, unknown>
+    ): BuiltInToolConversationSemantic | null {
+        void result;
+        void args;
         return null;
     }
 

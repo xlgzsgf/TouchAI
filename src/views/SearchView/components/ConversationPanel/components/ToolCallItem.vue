@@ -1,81 +1,100 @@
 ﻿<!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <template>
-    <div class="my-2 w-full">
-        <button
-            type="button"
-            class="tool-call-toggle"
-            :aria-expanded="isExpanded"
-            @click="toggleExpanded"
-        >
-            <div class="tool-call-main">
-                <AppIcon name="wrench" class="tool-call-icon" />
-                <div class="tool-call-text">
-                    <div class="tool-call-title-row">
-                        <span class="tool-call-label">{{ toolDisplayName }}</span>
-                        <span v-if="toolBadgeLabel" class="tool-call-server">
-                            {{ toolBadgeLabel }}
-                        </span>
+    <BuiltInBashToolCallItem
+        v-if="builtinCardComponent"
+        :tool-call="toolCall"
+        :verb-text="builtinVerbText"
+        :summary-text="builtinSummaryText"
+        :duration-text="builtinDurationText"
+    />
+    <div v-else :class="rootClass" @mousedown="handleMouseDown">
+        <template v-if="isBuiltinTool">
+            <div class="tool-call-log-line">
+                <span class="tool-call-log-verb">{{ builtinVerbText }}</span>
+                <span v-if="builtinSummaryText" class="tool-call-log-content">
+                    {{ ` ${builtinSummaryText}` }}
+                </span>
+                <span v-if="builtinDurationText" class="tool-call-log-duration">
+                    {{ ` (${builtinDurationText})` }}
+                </span>
+            </div>
+        </template>
+
+        <template v-else>
+            <button
+                type="button"
+                class="tool-call-toggle"
+                :aria-expanded="isExpanded"
+                @click="toggleExpanded"
+            >
+                <div class="tool-call-main">
+                    <AppIcon name="wrench" class="tool-call-icon" />
+                    <div class="tool-call-text">
+                        <div class="tool-call-title-row">
+                            <span class="tool-call-label">{{ toolDisplayName }}</span>
+                            <span v-if="toolBadgeLabel" class="tool-call-server">
+                                {{ toolBadgeLabel }}
+                            </span>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="tool-call-meta">
-                <span
-                    v-if="statusType === 'running'"
-                    class="tool-call-status tool-call-status--running"
-                >
-                    <span class="tool-call-pulse"></span>
-                    {{ statusText }}
-                </span>
-                <span
-                    v-else-if="statusType === 'error'"
-                    class="tool-call-status tool-call-status--error"
-                >
-                    {{ statusText }}
-                </span>
-                <span
-                    v-else
-                    :class="
-                        statusType === 'rejected'
-                            ? 'tool-call-status tool-call-status--rejected'
-                            : 'tool-call-status tool-call-status--completed'
-                    "
-                >
-                    {{ statusText }}
-                </span>
-                <span v-if="toolCall.durationMs" class="tool-call-duration">
-                    {{ toolCall.durationMs }}ms
-                </span>
-                <AppIcon
-                    name="chevron-right"
-                    :class="
-                        isExpanded ? 'tool-call-arrow tool-call-arrow--expanded' : 'tool-call-arrow'
-                    "
-                />
-            </div>
-        </button>
-
-        <transition name="tool-call-slide">
-            <div v-if="isExpanded" class="tool-call-detail">
-                <div class="tool-call-section">
-                    <h4 class="tool-call-section-title">参数</h4>
-                    <pre class="tool-call-block custom-scrollbar-thin">{{ argumentsText }}</pre>
+                <div class="tool-call-meta">
+                    <span :class="['tool-call-status', cardStatusClass]">
+                        <span v-if="statusType === 'running'" class="tool-call-pulse"></span>
+                        {{ statusText }}
+                    </span>
+                    <span v-if="toolCall.durationMs" class="tool-call-duration">
+                        {{ toolCall.durationMs }}ms
+                    </span>
+                    <AppIcon
+                        name="chevron-right"
+                        :class="
+                            isExpanded
+                                ? 'tool-call-arrow tool-call-arrow--expanded'
+                                : 'tool-call-arrow'
+                        "
+                    />
                 </div>
+            </button>
 
-                <div class="tool-call-section">
-                    <h4 class="tool-call-section-title">结果</h4>
-                    <pre class="tool-call-block custom-scrollbar-thin">{{ resultText }}</pre>
+            <transition name="tool-call-slide">
+                <div v-if="isExpanded" class="tool-call-detail">
+                    <div class="tool-call-section">
+                        <h4 class="tool-call-section-title">参数</h4>
+                        <pre
+                            class="tool-call-block custom-scrollbar-thin"
+                            v-text="argumentsText"
+                        ></pre>
+                    </div>
+
+                    <div class="tool-call-section">
+                        <h4 class="tool-call-section-title">结果</h4>
+                        <pre
+                            class="tool-call-block custom-scrollbar-thin"
+                            v-text="resultText"
+                        ></pre>
+                    </div>
                 </div>
-            </div>
-        </transition>
+            </transition>
+        </template>
     </div>
 </template>
 
 <script setup lang="ts">
     import AppIcon from '@components/AppIcon.vue';
+    import type { Component } from 'vue';
     import { computed, ref } from 'vue';
 
     import type { ToolCallInfo } from '@/types/conversation';
+
+    import BuiltInBashToolCallItem from './BuiltInBashToolCallItem.vue';
+
+    const BUILTIN_ROOT_CLASS =
+        'tool-call-log-wrapper paragraph-node touchai-markdown touchai-markdown--default';
+    const BUILTIN_CARD_COMPONENTS: Record<string, Component> = {
+        bash: BuiltInBashToolCallItem,
+    };
 
     interface Props {
         toolCall: ToolCallInfo;
@@ -84,6 +103,31 @@
     const props = defineProps<Props>();
 
     const isExpanded = ref(false);
+    const isBuiltinTool = computed(() => {
+        return (
+            props.toolCall.source === 'builtin' || props.toolCall.sourceLabel?.trim() === '内置工具'
+        );
+    });
+    const builtinToolToken = computed(() => {
+        return (
+            normalizeToolToken(props.toolCall.namespacedName) ||
+            normalizeToolToken(props.toolCall.name)
+        );
+    });
+    const builtinCardComponent = computed(() => {
+        if (!isBuiltinTool.value) {
+            return null;
+        }
+
+        return BUILTIN_CARD_COMPONENTS[builtinToolToken.value] ?? null;
+    });
+    const rootClass = computed(() => {
+        if (isBuiltinTool.value) {
+            return BUILTIN_ROOT_CLASS;
+        }
+
+        return 'my-2 w-full';
+    });
     const toolDisplayName = computed(() => {
         const trimmed = props.toolCall.name?.trim();
         if (trimmed) {
@@ -104,11 +148,10 @@
         return formatJson(props.toolCall.arguments ?? {});
     });
     const statusType = computed<'running' | 'error' | 'completed' | 'rejected'>(() => {
-        if (props.toolCall.status === 'executing') {
-            return 'running';
-        }
-
-        if (props.toolCall.status === 'awaiting_approval') {
+        if (
+            props.toolCall.status === 'executing' ||
+            props.toolCall.status === 'awaiting_approval'
+        ) {
             return 'running';
         }
 
@@ -123,24 +166,37 @@
         return 'completed';
     });
     const statusText = computed(() => {
+        return getToolStatusText(props.toolCall.status, statusType.value);
+    });
+    const cardStatusClass = computed(() => {
+        return getStatusClassName('tool-call-status--', statusType.value);
+    });
+    const fallbackBuiltinVerbText = computed(() => {
         if (props.toolCall.status === 'awaiting_approval') {
             return '等待批准';
         }
 
-        if (statusType.value === 'running') {
-            return '运行中';
+        if (props.toolCall.status === 'executing') {
+            return '正在处理';
         }
 
-        if (statusType.value === 'error') {
-            return '失败';
+        if (props.toolCall.status === 'error') {
+            return '处理失败';
         }
 
-        if (statusType.value === 'rejected') {
+        if (props.toolCall.status === 'rejected') {
             return '已拒绝';
         }
 
-        return '完成';
+        return '已处理';
     });
+    const builtinVerbText = computed(() => {
+        return props.toolCall.builtinPresentation?.verb || fallbackBuiltinVerbText.value;
+    });
+    const builtinSummaryText = computed(
+        () => props.toolCall.builtinPresentation?.content?.trim() || toolDisplayName.value
+    );
+    const builtinDurationText = computed(() => formatDurationLabel(props.toolCall.durationMs));
     const resultText = computed(() => {
         if (props.toolCall.status === 'executing') {
             return '执行中...';
@@ -174,12 +230,106 @@
         }
     }
 
+    function normalizeToolToken(value?: string): string {
+        return (
+            value
+                ?.trim()
+                .toLowerCase()
+                .replace(/^builtin__/, '')
+                .replace(/[\s_-]+/g, '') || ''
+        );
+    }
+
+    function getToolStatusText(
+        status: ToolCallInfo['status'],
+        statusTypeValue: 'running' | 'error' | 'completed' | 'rejected',
+        options?: {
+            completedText?: string;
+        }
+    ): string {
+        if (status === 'awaiting_approval') {
+            return '等待批准';
+        }
+
+        if (statusTypeValue === 'running') {
+            return '运行中';
+        }
+
+        if (statusTypeValue === 'error') {
+            return '失败';
+        }
+
+        if (statusTypeValue === 'rejected') {
+            return '已拒绝';
+        }
+
+        return options?.completedText || '完成';
+    }
+
+    function getStatusClassName(
+        prefix: string,
+        statusTypeValue: 'running' | 'error' | 'completed' | 'rejected'
+    ): string {
+        if (statusTypeValue === 'running') {
+            return `${prefix}running`;
+        }
+
+        if (statusTypeValue === 'error') {
+            return `${prefix}error`;
+        }
+
+        if (statusTypeValue === 'rejected') {
+            return `${prefix}rejected`;
+        }
+
+        return `${prefix}completed`;
+    }
+
+    function formatDurationLabel(durationMs?: number): string | null {
+        if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs < 0) {
+            return null;
+        }
+
+        if (durationMs < 1000) {
+            return `${Math.round(durationMs)}ms`;
+        }
+
+        const totalSeconds = Math.round(durationMs / 1000);
+        if (totalSeconds < 60) {
+            return `${totalSeconds}s`;
+        }
+
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        if (seconds === 0) {
+            return `${minutes}m`;
+        }
+
+        return `${minutes}m ${seconds}s`;
+    }
+
     function toggleExpanded() {
         isExpanded.value = !isExpanded.value;
+    }
+
+    function handleMouseDown(event: MouseEvent) {
+        if (isBuiltinTool.value && !builtinCardComponent.value) {
+            event.preventDefault();
+        }
     }
 </script>
 
 <style scoped>
+    .tool-call-log-wrapper {
+        width: 100%;
+        margin: 0.3em 0;
+        cursor: default;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+    }
+
     .tool-call-toggle {
         width: 100%;
         display: flex;
@@ -212,6 +362,56 @@
         align-items: center;
         gap: 0.5rem;
         font-size: 12px;
+    }
+
+    .tool-call-log-line {
+        display: block;
+        min-width: 0;
+        margin: 0;
+        overflow: hidden;
+        color: rgb(107, 114, 128);
+        cursor: default;
+        font-family: inherit;
+        font-size: inherit;
+        font-weight: inherit;
+        line-height: inherit;
+        letter-spacing: inherit;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        transition: color 0.16s ease;
+    }
+
+    .tool-call-log-wrapper:hover .tool-call-log-line {
+        color: rgb(75, 85, 99);
+    }
+
+    .tool-call-log-verb {
+        color: inherit;
+        font-size: 0.9em;
+    }
+
+    .tool-call-log-content,
+    .tool-call-log-duration {
+        color: rgb(156, 163, 175);
+        font-size: 0.9em;
+        transition: color 0.16s ease;
+    }
+
+    .tool-call-log-wrapper
+        :is(.tool-call-log-verb, .tool-call-log-content, .tool-call-log-duration) {
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+    }
+
+    .tool-call-log-wrapper:hover .tool-call-log-content,
+    .tool-call-log-wrapper:hover .tool-call-log-duration {
+        color: rgb(107, 114, 128);
     }
 
     .tool-call-icon {
@@ -416,6 +616,16 @@
     .tool-call-slide-leave-to {
         opacity: 0;
         transform: translateY(-3px);
+    }
+
+    @media (max-width: 640px) {
+        .tool-call-detail {
+            flex-direction: column;
+        }
+
+        .tool-call-toggle {
+            align-items: flex-start;
+        }
     }
 
     @keyframes tc-pulse {

@@ -16,6 +16,10 @@ import { computed, ref } from 'vue';
 
 import { useToolApproval } from '@/composables/useToolApproval';
 import { useWidgetManager } from '@/composables/useWidgetManager';
+import {
+    buildBuiltInToolConversationPresentation,
+    resolveBuiltInToolConversationSemantic,
+} from '@/services/BuiltInToolService/presentation';
 import { useMcpStore } from '@/stores/mcp';
 import type {
     ConversationMessage,
@@ -24,6 +28,7 @@ import type {
     ToolApprovalInfo,
     ToolCallInfo,
 } from '@/types/conversation';
+import { collapseWhitespace, truncateText } from '@/utils/text';
 
 export interface UseAiRequestOptions {
     sessionId?: number;
@@ -157,6 +162,35 @@ export function useAgent(options: UseAiRequestOptions = {}) {
         };
     };
 
+    const syncBuiltInToolCallPresentation = (toolCall: ToolCallInfo): void => {
+        if (toolCall.source !== 'builtin') {
+            delete toolCall.builtinConversationSemantic;
+            delete toolCall.builtinPresentation;
+            return;
+        }
+
+        if (!toolCall.builtinConversationSemantic && toolCall.result) {
+            toolCall.builtinConversationSemantic =
+                resolveBuiltInToolConversationSemantic(
+                    toolCall.namespacedName || toolCall.name,
+                    toolCall.arguments ?? {},
+                    {
+                        result: toolCall.result,
+                    }
+                ) ?? undefined;
+        }
+        toolCall.builtinPresentation =
+            buildBuiltInToolConversationPresentation(
+                toolCall.namespacedName || toolCall.name,
+                toolCall.arguments ?? {},
+                toolCall.status,
+                {
+                    semantic: toolCall.builtinConversationSemantic,
+                    result: toolCall.result,
+                }
+            ) ?? undefined;
+    };
+
     const upsertToolCall = (
         message: ConversationMessage,
         toolEvent: ExtendedToolEvent & { type: 'call_start' }
@@ -173,9 +207,11 @@ export function useAgent(options: UseAiRequestOptions = {}) {
             existingToolCall.serverName = display.serverName;
             existingToolCall.serverId = display.serverId;
             existingToolCall.arguments = toolEvent.arguments;
+            existingToolCall.builtinConversationSemantic = toolEvent.builtinConversationSemantic;
             if (existingToolCall.status !== 'awaiting_approval') {
                 existingToolCall.status = 'executing';
             }
+            syncBuiltInToolCallPresentation(existingToolCall);
             return existingToolCall;
         }
 
@@ -188,8 +224,10 @@ export function useAgent(options: UseAiRequestOptions = {}) {
             serverId: display.serverId,
             sourceLabel: display.sourceLabel,
             arguments: toolEvent.arguments,
+            builtinConversationSemantic: toolEvent.builtinConversationSemantic,
             status: 'executing',
         };
+        syncBuiltInToolCallPresentation(toolCall);
         toolCalls.push(toolCall);
         return toolCall;
     };
@@ -204,6 +242,7 @@ export function useAgent(options: UseAiRequestOptions = {}) {
 
         if (toolCall) {
             updater(toolCall);
+            syncBuiltInToolCallPresentation(toolCall);
         }
     };
 
@@ -334,12 +373,8 @@ export function useAgent(options: UseAiRequestOptions = {}) {
         // 如果是新会话，预先创建数据库会话
         if (!currentSessionId.value) {
             try {
-                const normalized = prompt.trim().replace(/\s+/g, ' ');
-                const title = !normalized
-                    ? '新会话'
-                    : normalized.length <= 40
-                      ? normalized
-                      : `${normalized.slice(0, 40)}...`;
+                const normalized = collapseWhitespace(prompt);
+                const title = !normalized ? '新会话' : truncateText(normalized, 40);
                 currentSessionId.value = await createSession(
                     title,
                     modelId || '',

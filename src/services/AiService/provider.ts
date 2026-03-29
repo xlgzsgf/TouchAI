@@ -2,8 +2,8 @@
 
 import type { ProviderDriver } from '@database/schema';
 
-import { AnthropicProviderAdapter } from './providers/anthropic';
 import { AlibabaProviderAdapter } from './providers/alibaba';
+import { AnthropicProviderAdapter } from './providers/anthropic';
 import { DeepSeekProviderAdapter } from './providers/deepseek';
 import { GoogleProviderAdapter } from './providers/google';
 import { MiniMaxProviderAdapter } from './providers/minimax';
@@ -11,8 +11,8 @@ import { MoonshotProviderAdapter } from './providers/moonshot';
 import { OpenAIProviderAdapter } from './providers/openai';
 import { normalizeProviderBaseUrl } from './providers/shared/ai-sdk-base';
 import { XaiProviderAdapter } from './providers/xai';
-import type { AiProvider, AiProviderConfig } from './types';
 import { ZhipuProviderAdapter } from './providers/zhipu';
+import type { AiProvider, AiProviderConfig } from './types';
 
 export interface ProviderDriverDefinition {
     driver: ProviderDriver;

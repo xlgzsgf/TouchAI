@@ -10,7 +10,8 @@ export const upgradeModelArgsSchema = z.object({}).strict();
 /**
  * 暴露给模型的 UpgradeModel 工具说明。
  */
-export const UPGRADE_MODEL_TOOL_DESCRIPTION = '升级当前请求模型';
+export const UPGRADE_MODEL_TOOL_DESCRIPTION =
+    '当用户要求升级当前模型、切换到更强模型或切到更高一级模型时立即调用；无需参数';
 
 /**
  * 暴露给模型的 UpgradeModel 工具输入 schema。
