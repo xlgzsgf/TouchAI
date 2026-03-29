@@ -81,6 +81,47 @@ function normalizeToolName(toolName: string | undefined): string | undefined {
     return normalized ? normalized : undefined;
 }
 
+function buildFallbackToolCall(state: ToolStreamState, callId: string): AiToolCall | null {
+    const toolName = normalizeToolName(state.namesByCallId.get(callId));
+    if (!toolName) {
+        return null;
+    }
+
+    const bufferedArguments = state.buffersByCallId.get(callId) ?? '';
+    const argumentsBuffer = bufferedArguments.trim() ? bufferedArguments : '{}';
+    return {
+        id: callId,
+        name: toolName,
+        arguments: argumentsBuffer,
+        providerOptions: state.providerOptionsByCallId.get(callId),
+    };
+}
+
+function buildToolCallsForFinish(
+    state: ToolStreamState,
+    reason: FinishReason | undefined
+): AiToolCall[] {
+    const toolCallsByCallId = new Map(state.finalToolCallsByCallId);
+    const shouldBackfillMissingToolCalls = reason === 'tool-calls';
+
+    if (shouldBackfillMissingToolCalls) {
+        for (const callId of state.namesByCallId.keys()) {
+            if (toolCallsByCallId.has(callId)) {
+                continue;
+            }
+
+            const fallbackToolCall = buildFallbackToolCall(state, callId);
+            if (fallbackToolCall) {
+                toolCallsByCallId.set(callId, fallbackToolCall);
+            }
+        }
+    }
+
+    return [...toolCallsByCallId.values()].sort((left, right) => {
+        return getToolIndex(state, left.id) - getToolIndex(state, right.id);
+    });
+}
+
 function mapFinishReason(reason: FinishReason | undefined, hasToolCalls: boolean): string {
     if (hasToolCalls) {
         return 'tool_calls';
@@ -250,9 +291,7 @@ export function createAiSdkStreamProcessor() {
     }
 
     function buildFinishChunk(reason: FinishReason | undefined): AiStreamChunk {
-        const toolCalls = [...state.finalToolCallsByCallId.values()].sort((left, right) => {
-            return getToolIndex(state, left.id) - getToolIndex(state, right.id);
-        });
+        const toolCalls = buildToolCallsForFinish(state, reason);
 
         return {
             content: '',
