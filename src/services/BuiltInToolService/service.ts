@@ -9,13 +9,15 @@ import {
 } from '@database/queries';
 import type { ModelWithProvider } from '@database/queries/models';
 import type { ToolLogKind } from '@database/schema';
+
+import { AiError, AiErrorCode } from '@/services/AgentService/contracts/errors';
 import type {
     AiToolCall,
     AiToolDefinition,
     ToolApprovalDecisionRequest,
     ToolApprovalRequest,
     ToolEvent,
-} from '@services/AiService/types';
+} from '@/services/AgentService/contracts/tooling';
 
 import { builtInToolRegistry } from './registry';
 import type {
@@ -50,6 +52,46 @@ interface BuiltInToolExecutionResponse {
     toolLogId: number | null;
     toolLogKind: ToolLogKind;
     controlSignal?: BuiltInToolControlSignal;
+}
+
+function throwIfCancelled(signal?: AbortSignal): void {
+    if (signal?.aborted) {
+        throw new AiError(AiErrorCode.REQUEST_CANCELLED);
+    }
+}
+
+async function markCancelledToolLog(options: {
+    toolCallId: string;
+    toolLogId: number | null;
+    callStartTime: number;
+}): Promise<void> {
+    if (options.toolLogId !== null) {
+        await updateBuiltInToolLogByCallId(options.toolCallId, {
+            status: 'cancelled',
+            duration_ms: Date.now() - options.callStartTime,
+            error_message: 'Cancelled by user',
+        }).catch((error) => {
+            console.error(
+                '[BuiltInToolService] Failed to update cancelled built-in tool log:',
+                error
+            );
+        });
+    }
+}
+
+async function throwIfCancelledAndMarkToolLog(options: {
+    signal?: AbortSignal;
+    toolCallId: string;
+    toolLogId: number | null;
+    callStartTime: number;
+}): Promise<void> {
+    if (!options.signal?.aborted) {
+        return;
+    }
+
+    await markCancelledToolLog(options);
+
+    throw new AiError(AiErrorCode.REQUEST_CANCELLED);
 }
 
 /**
@@ -213,6 +255,7 @@ class BuiltInToolService {
 
         let toolLogId: number | null = null;
         try {
+            throwIfCancelled(options.signal);
             // 3. 新建 pending 日志
             const toolLog = await createBuiltInToolLog({
                 tool_id: resolved.entity.tool_id,
@@ -226,10 +269,21 @@ class BuiltInToolService {
             });
             toolLogId = toolLog.id;
         } catch (error) {
+            const aiError = AiError.fromError(error);
+            if (aiError.is(AiErrorCode.REQUEST_CANCELLED)) {
+                throw aiError;
+            }
+
             console.error('[BuiltInToolService] Failed to create built-in tool log:', error);
         }
 
         // 4. 如果需要审批，先走审批。
+        await throwIfCancelledAndMarkToolLog({
+            signal: options.signal,
+            toolCallId: options.toolCall.id,
+            toolLogId,
+            callStartTime,
+        });
         const approvalRequest = await this.buildApprovalRequest(
             resolved,
             options.toolArgs,
@@ -255,12 +309,25 @@ class BuiltInToolService {
                 );
             });
 
+            await throwIfCancelledAndMarkToolLog({
+                signal: options.signal,
+                toolCallId: options.toolCall.id,
+                toolLogId,
+                callStartTime,
+            });
+
             const approved = options.requestToolApproval
                 ? await options.requestToolApproval({
                       callId: options.toolCall.id,
                       ...approvalRequest,
                   })
                 : false;
+            await throwIfCancelledAndMarkToolLog({
+                signal: options.signal,
+                toolCallId: options.toolCall.id,
+                toolLogId,
+                callStartTime,
+            });
             const resolutionText = approved ? '已批准执行此命令' : '用户已拒绝执行此命令';
 
             options.emitToolEvent({
@@ -322,6 +389,12 @@ class BuiltInToolService {
 
         let toolResult: BuiltInToolExecutionResult;
         try {
+            await throwIfCancelledAndMarkToolLog({
+                signal: options.signal,
+                toolCallId: options.toolCall.id,
+                toolLogId,
+                callStartTime,
+            });
             // 5. 执行工具
             toolResult = await this.executeResolvedTool(
                 resolved,
@@ -329,6 +402,16 @@ class BuiltInToolService {
                 executionContext
             );
         } catch (error) {
+            const aiError = AiError.fromError(error);
+            if (aiError.is(AiErrorCode.REQUEST_CANCELLED)) {
+                await markCancelledToolLog({
+                    toolCallId: options.toolCall.id,
+                    toolLogId,
+                    callStartTime,
+                });
+                throw aiError;
+            }
+
             const errorMessage = error instanceof Error ? error.message : String(error);
             console.error(
                 `[BuiltInToolService] Built-in tool execution failed: ${options.toolCall.name}`,

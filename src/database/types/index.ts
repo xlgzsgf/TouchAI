@@ -260,6 +260,9 @@ export interface SessionTurnEntity {
     id: number;
     session_id: number | null;
     model_id: number;
+    task_id: string;
+    execution_mode: 'foreground' | 'background';
+    prompt_snapshot_json: string;
     prompt_message_id: number | null;
     response_message_id: number | null;
     status: DbTurnStatus;
@@ -273,6 +276,9 @@ export interface SessionTurnEntity {
 export interface SessionTurnCreateData {
     session_id?: number | null;
     model_id: number;
+    task_id: string;
+    execution_mode?: 'foreground' | 'background';
+    prompt_snapshot_json: string;
     prompt_message_id?: number | null;
     response_message_id?: number | null;
     status?: DbTurnStatus;
@@ -291,6 +297,7 @@ export interface SessionTurnAttemptEntity {
     attempt_index: number;
     max_retries: number;
     status: DbTurnStatus;
+    checkpoint_json: string;
     error_message: string | null;
     duration_ms: number | null;
     started_at: string;
@@ -304,6 +311,7 @@ export interface SessionTurnAttemptCreateData {
     attempt_index: number;
     max_retries?: number;
     status?: DbTurnStatus;
+    checkpoint_json: string;
     error_message?: string | null;
     duration_ms?: number | null;
     started_at?: string;

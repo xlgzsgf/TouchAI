@@ -9,4 +9,7 @@ export const builtInTools = {
     executeBash(request: BuiltInBashExecutionRequest): Promise<BuiltInBashExecutionResponse> {
         return invoke('built_in_tools_execute_bash', { request });
     },
+    cancelBash(executionId: string): Promise<boolean> {
+        return invoke('built_in_tools_cancel_bash', { executionId });
+    },
 } as const;

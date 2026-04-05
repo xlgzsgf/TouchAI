@@ -3,8 +3,9 @@
 //! 内置工具原生命令。
 
 use crate::core::built_in_tools::{
-    self, BuiltInBashExecutionRequest, BuiltInBashExecutionResponse,
+    self, BashExecutionRegistry, BuiltInBashExecutionRequest, BuiltInBashExecutionResponse,
 };
+use tauri::State;
 
 /// 执行内置 Bash 工具请求。
 ///
@@ -13,6 +14,16 @@ use crate::core::built_in_tools::{
 #[tauri::command]
 pub async fn built_in_tools_execute_bash(
     request: BuiltInBashExecutionRequest,
+    registry: State<'_, BashExecutionRegistry>,
 ) -> Result<BuiltInBashExecutionResponse, String> {
-    built_in_tools::execute_bash(request).await
+    built_in_tools::execute_bash(request, registry.inner()).await
+}
+
+/// 取消一条正在执行中的内置 Bash 请求。
+#[tauri::command]
+pub fn built_in_tools_cancel_bash(
+    execution_id: String,
+    registry: State<'_, BashExecutionRegistry>,
+) -> Result<bool, String> {
+    Ok(registry.cancel(&execution_id))
 }

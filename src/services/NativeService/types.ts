@@ -5,6 +5,7 @@ export interface PopupConfig {
 }
 
 export interface BuiltInBashExecutionRequest {
+    executionId: string;
     command: string;
     workingDirectory?: string | null;
     timeoutMs?: number | null;
@@ -17,6 +18,7 @@ export interface BuiltInBashExecutionResponse {
     exitCode: number | null;
     success: boolean;
     timedOut: boolean;
+    cancelled: boolean;
     durationMs: number;
     stdout: string;
     stderr: string;

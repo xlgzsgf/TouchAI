@@ -49,6 +49,10 @@ function getBuiltInToolConversationVerb(
         return '已拒绝';
     }
 
+    if (status === 'cancelled') {
+        return '已取消';
+    }
+
     switch (action) {
         case 'run':
             return status === 'executing' ? '已启动' : status === 'error' ? '运行失败' : '已运行';

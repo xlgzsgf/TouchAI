@@ -2,13 +2,14 @@
 
 import type { ModelWithProvider } from '@database/queries/models';
 import type { BuiltInToolEntity } from '@database/types';
+
 import type {
     AiToolDefinition,
     ToolApprovalRequest,
     ToolEvent,
     ToolEventBuiltInConversationSemantic,
     ToolEventBuiltInConversationSemanticAction,
-} from '@services/AiService/types';
+} from '@/services/AgentService/contracts/tooling';
 
 /**
  * 当前内置工具体系允许暴露给模型的稳定工具标识。
@@ -67,7 +68,8 @@ export type BuiltInToolConversationStatus =
     | 'awaiting_approval'
     | 'completed'
     | 'error'
-    | 'rejected';
+    | 'rejected'
+    | 'cancelled';
 
 export type BuiltInToolConversationSemanticAction = ToolEventBuiltInConversationSemanticAction;
 

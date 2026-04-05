@@ -1,7 +1,9 @@
 // Copyright (c) 2026. 千诚. Licensed under GPL v3
 
-import type { ShowWidgetEventPayload, ShowWidgetMode } from '@services/AiService/types';
-
+import type {
+    ShowWidgetEventPayload,
+    ShowWidgetMode,
+} from '@/services/AgentService/contracts/tooling';
 import { normalizeString } from '@/utils/text';
 
 import type { BaseBuiltInToolExecutionContext } from '../../../types';

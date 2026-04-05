@@ -1,8 +1,8 @@
 // Copyright (c) 2026. 千诚. Licensed under GPL v3
 
-import type { ToolApprovalRequest } from '@services/AiService/types';
 import { native } from '@services/NativeService';
 
+import type { ToolApprovalRequest } from '@/services/AgentService/contracts/tooling';
 import type { GeneralSettingsData } from '@/stores/settings';
 import { truncateText } from '@/utils/text';
 

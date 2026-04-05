@@ -273,6 +273,13 @@ export const sessionTurns = sqliteTable(
         model_id: integer('model_id')
             .notNull()
             .references(() => models.id, { onDelete: 'cascade' }),
+        task_id: text('task_id').notNull(),
+        execution_mode: text('execution_mode', {
+            enum: ['foreground', 'background'],
+        })
+            .notNull()
+            .default('foreground'),
+        prompt_snapshot_json: text('prompt_snapshot_json').notNull(),
         prompt_message_id: integer('prompt_message_id').references(() => messages.id, {
             onDelete: 'set null',
         }),
@@ -314,6 +321,7 @@ export const sessionTurnAttempts = sqliteTable(
         })
             .notNull()
             .default('pending'),
+        checkpoint_json: text('checkpoint_json').notNull(),
         error_message: text('error_message'),
         duration_ms: integer('duration_ms'),
         started_at: text('started_at')
@@ -474,6 +482,7 @@ export const builtInToolLogs = sqliteTable('built_in_tool_logs', {
             'success',
             'error',
             'timeout',
+            'cancelled',
         ],
     })
         .notNull()
@@ -587,3 +596,4 @@ export type TurnStatus = SessionTurn['status'];
 export type RequestStatus = TurnStatus;
 export type TransportType = McpServer['transport_type'];
 export type ToolLogStatus = McpToolLog['status'];
+export type PersistedToolLogStatus = McpToolLog['status'] | BuiltInToolLog['status'];

@@ -3,6 +3,7 @@
 import { asc, count, eq } from 'drizzle-orm';
 
 import { db } from '../index';
+import type { PersistedToolLogStatus } from '../schema';
 import { builtInToolLogs, mcpToolLogs, messages } from '../schema';
 import type { MessageCreateData, MessageEntity } from '../types';
 import { findAttachmentsByMessageIds, type MessageAttachmentRow } from './attachments';
@@ -15,7 +16,7 @@ export interface ToolLogHistoryRow {
     tool_input: string;
     message_id: number | null;
     created_at: string;
-    tool_status: string;
+    tool_status: PersistedToolLogStatus;
     tool_duration_ms: number | null;
     server_id: number | null;
 }
@@ -26,13 +27,21 @@ export interface MessageRow extends MessageEntity {
     tool_name: string | null;
     tool_input: string | null;
     tool_log_ref_id: number | null;
-    tool_status: string | null;
+    tool_status: PersistedToolLogStatus | null;
     tool_duration_ms: number | null;
     server_id: number | null;
 }
 
 function toNamespacedToolName(toolLog: ToolLogHistoryRow): string {
-    return toolLog.source === 'builtin' ? `builtin__${toolLog.tool_name}` : toolLog.tool_name;
+    if (toolLog.source === 'builtin') {
+        return `builtin__${toolLog.tool_name}`;
+    }
+
+    if (toolLog.server_id !== null) {
+        return `mcp__${toolLog.server_id}__${toolLog.tool_name}`;
+    }
+
+    return toolLog.tool_name;
 }
 
 function buildMessageRow(

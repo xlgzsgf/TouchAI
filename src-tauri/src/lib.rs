@@ -3,6 +3,7 @@
 mod commands;
 mod core;
 
+use core::built_in_tools::BashExecutionRegistry;
 use core::mcp::McpClientManager;
 use core::setup;
 use core::window::popup::PopupRegistry;
@@ -44,6 +45,7 @@ pub fn run() {
                 .build(),
         )
         .manage(PopupRegistry::new())
+        .manage(BashExecutionRegistry::new())
         .manage(McpClientManager::new())
         .invoke_handler(commands::invoke_handler());
 

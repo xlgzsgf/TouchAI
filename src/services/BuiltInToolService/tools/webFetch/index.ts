@@ -1,7 +1,6 @@
 // Copyright (c) 2026. 千诚. Licensed under GPL v3
 
-import { createTauriFetch } from '@services/AiService/providers/shared/tauri-fetch';
-
+import { createTauriFetch } from '@/services/AgentService/infrastructure/providers';
 import { normalizeOptionalString, truncateText } from '@/utils/text';
 
 import {

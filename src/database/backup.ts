@@ -587,6 +587,9 @@ class DatabaseBackupService {
                 source_turn_id INTEGER PRIMARY KEY,
                 target_session_id INTEGER NOT NULL,
                 target_model_id INTEGER NOT NULL,
+                task_id TEXT NOT NULL,
+                execution_mode TEXT NOT NULL,
+                prompt_snapshot_json TEXT NOT NULL,
                 target_prompt_message_id INTEGER,
                 target_response_message_id INTEGER,
                 status TEXT NOT NULL,
@@ -601,6 +604,9 @@ class DatabaseBackupService {
                 source_turn_id,
                 target_session_id,
                 target_model_id,
+                task_id,
+                execution_mode,
+                prompt_snapshot_json,
                 target_prompt_message_id,
                 target_response_message_id,
                 status,
@@ -614,6 +620,9 @@ class DatabaseBackupService {
                 source_turns.id,
                 session_map.target_session_id,
                 target_models.id,
+                source_turns.task_id,
+                source_turns.execution_mode,
+                source_turns.prompt_snapshot_json,
                 prompt_message_map.target_message_id,
                 response_message_map.target_message_id,
                 source_turns.status,
@@ -650,6 +659,9 @@ class DatabaseBackupService {
             INSERT INTO main.session_turns (
                 session_id,
                 model_id,
+                task_id,
+                execution_mode,
+                prompt_snapshot_json,
                 prompt_message_id,
                 response_message_id,
                 status,
@@ -662,6 +674,9 @@ class DatabaseBackupService {
             SELECT
                 resolved_turns.target_session_id,
                 resolved_turns.target_model_id,
+                resolved_turns.task_id,
+                resolved_turns.execution_mode,
+                resolved_turns.prompt_snapshot_json,
                 resolved_turns.target_prompt_message_id,
                 resolved_turns.target_response_message_id,
                 resolved_turns.status,
@@ -676,6 +691,7 @@ class DatabaseBackupService {
                 FROM main.session_turns AS existing_turns
                 WHERE existing_turns.session_id = resolved_turns.target_session_id
                   AND existing_turns.model_id = resolved_turns.target_model_id
+                  AND existing_turns.task_id = resolved_turns.task_id
                   AND existing_turns.prompt_message_id IS resolved_turns.target_prompt_message_id
                   AND existing_turns.created_at = resolved_turns.created_at
             );
@@ -694,6 +710,7 @@ class DatabaseBackupService {
             INNER JOIN main.session_turns AS target_turns
                 ON target_turns.session_id = resolved_turns.target_session_id
                AND target_turns.model_id = resolved_turns.target_model_id
+               AND target_turns.task_id = resolved_turns.task_id
                AND target_turns.prompt_message_id IS resolved_turns.target_prompt_message_id
                AND target_turns.created_at = resolved_turns.created_at;
         `);
@@ -725,13 +742,24 @@ class DatabaseBackupService {
             -- 优化：使用单次 JOIN，避免多个相关子查询
             UPDATE main.session_turns
             SET
-                (response_message_id, status, error_message, tokens_used, duration_ms, updated_at) = (
+                (
+                    response_message_id,
+                    status,
+                    error_message,
+                    tokens_used,
+                    duration_ms,
+                    execution_mode,
+                    prompt_snapshot_json,
+                    updated_at
+                ) = (
                     SELECT
                         resolved_turns.target_response_message_id,
                         resolved_turns.status,
                         resolved_turns.error_message,
                         resolved_turns.tokens_used,
                         resolved_turns.duration_ms,
+                        resolved_turns.execution_mode,
+                        resolved_turns.prompt_snapshot_json,
                         resolved_turns.updated_at
                     FROM temp_turn_map AS turn_map
                     INNER JOIN temp_resolved_turns AS resolved_turns
@@ -843,7 +871,7 @@ class DatabaseBackupService {
         // 合并会话轮次尝试记录
         await currentDb.execute(`
             INSERT INTO main.session_turn_attempts (
-                turn_id, attempt_index, max_retries, status, error_message, duration_ms,
+                turn_id, attempt_index, max_retries, status, checkpoint_json, error_message, duration_ms,
                 started_at, finished_at, created_at, updated_at
             )
             SELECT
@@ -851,6 +879,7 @@ class DatabaseBackupService {
                 source_attempts.attempt_index,
                 source_attempts.max_retries,
                 source_attempts.status,
+                source_attempts.checkpoint_json,
                 source_attempts.error_message,
                 source_attempts.duration_ms,
                 source_attempts.started_at,

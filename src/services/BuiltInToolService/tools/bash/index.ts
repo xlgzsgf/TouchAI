@@ -1,8 +1,9 @@
 // Copyright (c) 2026. 千诚. Licensed under GPL v3
 
-import type { ToolApprovalRequest } from '@services/AiService/types';
 import { native } from '@services/NativeService';
 
+import { AiError, AiErrorCode } from '@/services/AgentService/contracts/errors';
+import type { ToolApprovalRequest } from '@/services/AgentService/contracts/tooling';
 import { normalizeOptionalString, truncateText } from '@/utils/text';
 
 import {
@@ -37,6 +38,54 @@ function buildBashConversationSemantic(
             120
         ),
     };
+}
+
+function throwIfCancelled(signal?: AbortSignal): void {
+    if (signal?.aborted) {
+        throw new AiError(AiErrorCode.REQUEST_CANCELLED);
+    }
+}
+
+async function executeCancelableBash(
+    request: {
+        executionId: string;
+        command: string;
+        workingDirectory?: string | null;
+        timeoutMs?: number | null;
+    },
+    signal?: AbortSignal
+) {
+    throwIfCancelled(signal);
+
+    let cancelIssued = false;
+    const handleAbort = () => {
+        cancelIssued = true;
+        void native.builtInTools.cancelBash(request.executionId).catch((error) => {
+            console.warn('[BashTool] Failed to cancel native bash execution:', error);
+        });
+    };
+
+    if (signal) {
+        signal.addEventListener('abort', handleAbort, { once: true });
+    }
+
+    try {
+        const response = await native.builtInTools.executeBash(request);
+        if (cancelIssued || response.cancelled) {
+            throw new AiError(AiErrorCode.REQUEST_CANCELLED);
+        }
+
+        throwIfCancelled(signal);
+        return response;
+    } catch (error) {
+        if (cancelIssued || signal?.aborted) {
+            throw new AiError(AiErrorCode.REQUEST_CANCELLED, error);
+        }
+
+        throw error;
+    } finally {
+        signal?.removeEventListener('abort', handleAbort);
+    }
 }
 
 /**
@@ -99,13 +148,15 @@ export async function executeBashTool(
     context: BaseBuiltInToolExecutionContext
 ): Promise<BuiltInToolExecutionResult> {
     const commandContext = resolveCommandContext(args, config);
-    const response = await native.builtInTools.executeBash({
-        command: commandContext.command,
-        workingDirectory: commandContext.workingDirectory,
-        timeoutMs: config.timeoutMs,
-    });
-
-    void context.signal;
+    const response = await executeCancelableBash(
+        {
+            executionId: context.callId,
+            command: commandContext.command,
+            workingDirectory: commandContext.workingDirectory,
+            timeoutMs: config.timeoutMs,
+        },
+        context.signal
+    );
 
     const output = response.combinedOutput.trim();
     const result = formatBashToolResult(response, commandContext, config.maxOutputChars);

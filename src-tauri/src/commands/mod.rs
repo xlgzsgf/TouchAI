@@ -33,6 +33,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         window::close_tray_menu,
         paths::get_app_directory_path,
         built_in_tools::built_in_tools_execute_bash,
+        built_in_tools::built_in_tools_cancel_bash,
         mcp::mcp_connect_server,
         mcp::mcp_disconnect_server,
         mcp::mcp_list_tools,

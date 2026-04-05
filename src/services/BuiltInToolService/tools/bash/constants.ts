@@ -2,7 +2,7 @@
 
 import type { BuiltInBashExecutionResponse } from '@services/NativeService';
 
-import type { AiToolDefinition } from '@/services/AiService/types';
+import type { AiToolDefinition } from '@/services/AgentService/contracts/tooling';
 
 import {
     nonEmptyTrimmedStringSchema,

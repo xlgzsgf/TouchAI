@@ -3,7 +3,9 @@
 //! 内置工具原生能力。
 
 mod bash;
+mod registry;
 mod types;
 
 pub use bash::execute_bash;
+pub use registry::BashExecutionRegistry;
 pub use types::{BuiltInBashExecutionRequest, BuiltInBashExecutionResponse};

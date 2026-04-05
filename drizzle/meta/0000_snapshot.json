@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b15fd182-ba92-4eb3-8871-c1fef04e4c95",
+  "id": "b3826a5a-45ff-410c-b95b-ace9075b4806",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "attachments": {
@@ -1295,6 +1295,13 @@
           "autoincrement": false,
           "default": "'pending'"
         },
+        "checkpoint_json": {
+          "name": "checkpoint_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "error_message": {
           "name": "error_message",
           "type": "text",
@@ -1397,6 +1404,28 @@
         "model_id": {
           "name": "model_id",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "task_id": {
+          "name": "task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "execution_mode": {
+          "name": "execution_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'foreground'"
+        },
+        "prompt_snapshot_json": {
+          "name": "prompt_snapshot_json",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false

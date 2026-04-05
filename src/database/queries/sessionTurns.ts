@@ -10,6 +10,9 @@ import { type ModelWithProvider, modelWithProviderSelection } from './models';
 export interface SessionTurnHistoryRow {
     id: number;
     session_id: number | null;
+    task_id: string;
+    execution_mode: SessionTurnEntity['execution_mode'];
+    prompt_snapshot_json: string;
     prompt_message_id: number | null;
     response_message_id: number | null;
     status: SessionTurnEntity['status'];
@@ -83,6 +86,9 @@ export const findSessionTurnsBySessionId = async (
         .select({
             id: sessionTurns.id,
             session_id: sessionTurns.session_id,
+            task_id: sessionTurns.task_id,
+            execution_mode: sessionTurns.execution_mode,
+            prompt_snapshot_json: sessionTurns.prompt_snapshot_json,
             prompt_message_id: sessionTurns.prompt_message_id,
             response_message_id: sessionTurns.response_message_id,
             status: sessionTurns.status,

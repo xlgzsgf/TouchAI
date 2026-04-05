@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BuiltInBashExecutionRequest {
+    /// 本次执行的唯一标识，用于后续取消。
+    pub execution_id: String,
     /// 用户或上层工具网关要执行的 PowerShell 命令文本。
     pub command: String,
     /// 可选工作目录。留空时沿用当前进程工作目录。
@@ -32,6 +34,8 @@ pub struct BuiltInBashExecutionResponse {
     pub success: bool,
     /// 是否因超时中止。
     pub timed_out: bool,
+    /// 是否因外部取消请求而中止。
+    pub cancelled: bool,
     /// 总耗时，单位毫秒。
     pub duration_ms: u64,
     /// 标准输出全文。
