@@ -84,7 +84,7 @@
                             <div class="min-w-0 flex-1">
                                 <div class="flex min-w-0 items-center gap-2">
                                     <p
-                                        class="history-session-title font-serif text-xs font-semibold text-stone-900"
+                                        class="history-session-title min-w-0 flex-1 font-serif text-xs font-semibold text-stone-900"
                                     >
                                         <span
                                             v-for="(segment, index) in getSessionTitleSegments(
@@ -96,6 +96,16 @@
                                             {{ segment.text }}
                                         </span>
                                     </p>
+                                    <div
+                                        v-if="getSessionStatus(session.id) === 'running'"
+                                        class="h-3 w-3 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"
+                                    ></div>
+                                    <div
+                                        v-else-if="
+                                            getSessionStatus(session.id) === 'waiting_approval'
+                                        "
+                                        class="h-2 w-2 rounded-full bg-blue-500"
+                                    ></div>
                                 </div>
 
                                 <p
@@ -137,6 +147,7 @@
 </template>
 
 <script setup lang="ts">
+    import { useSessionStatus } from '@/composables/useSessionStatus';
     import AppIcon from '@components/AppIcon.vue';
     import type { SessionEntity } from '@database/types';
     import { AppEvent, eventService } from '@services/EventService';
@@ -182,6 +193,7 @@
     const activeSessionId = computed(() => props.data?.activeSessionId ?? null);
     const searchQuery = computed(() => props.data?.searchQuery ?? '');
     const isLoading = computed(() => props.data?.isLoading ?? false);
+    const { getSessionStatus, refreshAllStatuses } = useSessionStatus();
 
     // 列表由页面层查询，这里只用已提交的 query 做高亮。
     const searchTokens = computed(() => {
@@ -546,6 +558,18 @@
             scrollAlign: 'top',
         });
     }
+
+    function loadSessions(loadedSessions: SessionEntity[]) {
+        refreshAllStatuses(loadedSessions.map((session) => session.id));
+    }
+
+    watch(
+        sessions,
+        (loadedSessions) => {
+            loadSessions(loadedSessions);
+        },
+        { immediate: true }
+    );
 
     watch(
         () => searchQuery.value,
