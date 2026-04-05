@@ -47,6 +47,7 @@ export enum AppEvent {
     POPUP_SESSION_OPEN = 'popup-session-history-open-session',
     POPUP_SESSION_SEARCH_QUERY_CHANGE = 'popup-session-history-search-query-change',
     POPUP_FOCUS_MAIN = 'popup-focus-main',
+    SESSION_TASK_STATUS_CHANGED = 'session:task:status-changed',
 }
 
 // ==================== MCP 事件 ====================
@@ -99,6 +100,13 @@ export interface FontReadyEvent {
     // 空 payload，仅作为通知
 }
 
+export interface SessionTaskStatusChangedEvent {
+    sessionId: number;
+    taskId: string;
+    status: 'running' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled';
+    previousStatus: 'running' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled' | null;
+}
+
 // ==================== 事件映射 ====================
 
 /**
@@ -128,6 +136,7 @@ export interface AppEventMap {
     [AppEvent.POPUP_SESSION_OPEN]: PopupSessionOpenPayload;
     [AppEvent.POPUP_SESSION_SEARCH_QUERY_CHANGE]: PopupSessionSearchQueryChangePayload;
     [AppEvent.POPUP_FOCUS_MAIN]: PopupFocusMainPayload;
+    [AppEvent.SESSION_TASK_STATUS_CHANGED]: SessionTaskStatusChangedEvent;
 }
 
 export type AppEventName = keyof AppEventMap;
