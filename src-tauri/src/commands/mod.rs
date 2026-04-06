@@ -3,6 +3,7 @@
 //! 命令入口模块。
 pub mod autostart;
 pub mod built_in_tools;
+pub mod database;
 pub mod mcp;
 pub mod paths;
 pub mod quick_search;
@@ -31,6 +32,15 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         autostart::disable_autostart,
         autostart::is_autostart_enabled,
         window::close_tray_menu,
+        database::database_query,
+        database::database_batch,
+        database::database_tx_begin,
+        database::database_tx_query,
+        database::database_tx_batch,
+        database::database_tx_commit,
+        database::database_tx_rollback,
+        database::database_export_backup,
+        database::database_import_backup,
         paths::get_app_directory_path,
         built_in_tools::built_in_tools_execute_bash,
         built_in_tools::built_in_tools_cancel_bash,

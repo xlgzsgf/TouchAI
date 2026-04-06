@@ -48,6 +48,16 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), String> {
     }
     info!("Application base directories initialized.");
 
+    let database_runtime =
+        tauri::async_runtime::block_on(crate::core::database::DatabaseRuntime::initialize(app))
+            .map_err(|error| {
+                error!("Failed to initialize database runtime: {}", error);
+                show_initialization_failed_dialog(app);
+                error
+            })?;
+    app.manage(database_runtime);
+    info!("Database runtime initialized.");
+
     // 异步初始化字体资源
     let app_handle = app.handle().clone();
     tauri::async_runtime::spawn(async move {

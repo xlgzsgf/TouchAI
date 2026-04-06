@@ -4,11 +4,12 @@ mod commands;
 mod core;
 
 use core::built_in_tools::BashExecutionRegistry;
+use core::database::DatabaseRuntime;
 use core::mcp::McpClientManager;
 use core::setup;
 use core::window::popup::PopupRegistry;
 use log::{error, warn};
-use tauri::Manager;
+use tauri::{Manager, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,7 +31,6 @@ pub fn run() {
                 }
             },
         ))
-        .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_shell::init())
@@ -47,6 +47,17 @@ pub fn run() {
         .manage(PopupRegistry::new())
         .manage(BashExecutionRegistry::new())
         .manage(McpClientManager::new())
+        .on_window_event(|window, event| {
+            if matches!(event, WindowEvent::Destroyed) {
+                if let Some(runtime) = window.app_handle().try_state::<DatabaseRuntime>() {
+                    let runtime = runtime.inner().clone();
+                    let window_label = window.label().to_string();
+                    tauri::async_runtime::spawn(async move {
+                        runtime.abort_transactions_for_window(&window_label).await;
+                    });
+                }
+            }
+        })
         .invoke_handler(commands::invoke_handler());
 
     #[cfg(all(feature = "mcp-bridge", debug_assertions))]
