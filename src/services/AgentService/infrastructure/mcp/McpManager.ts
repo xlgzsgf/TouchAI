@@ -1,4 +1,4 @@
-// Copyright (c) 2026. Qian Cheng. Licensed under GPL v3.
+﻿// Copyright (c) 2026. Qian Cheng. Licensed under GPL v3.
 
 /**
  * MCP Manager - 管理 MCP 服务器连接和工具调用
@@ -154,30 +154,23 @@ export class McpManager {
                 existingTools.map((tool) => [tool.name, tool.enabled])
             );
 
-            const drizzle = db.getDb();
-
-            await drizzle.transaction(async (tx) => {
-                // 先删除旧工具列表，然后插入服务器返回的新列表
-                // 这样可以处理从服务器中移除的工具
+            await db.transaction(async (tx) => {
                 await tx.delete(mcpTools).where(eq(mcpTools.server_id, serverId)).run();
 
-                // 批量插入新工具列表，保留已有的启用状态
-                if (tools.length === 0) {
-                    return;
+                if (tools.length > 0) {
+                    await tx
+                        .insert(mcpTools)
+                        .values(
+                            tools.map((tool) => ({
+                                server_id: serverId,
+                                name: tool.name,
+                                description: tool.description || null,
+                                input_schema: JSON.stringify(tool.input_schema),
+                                enabled: existingEnabledByName.get(tool.name) ?? 1,
+                            }))
+                        )
+                        .run();
                 }
-
-                await tx
-                    .insert(mcpTools)
-                    .values(
-                        tools.map((tool) => ({
-                            server_id: serverId,
-                            name: tool.name,
-                            description: tool.description || null,
-                            input_schema: JSON.stringify(tool.input_schema),
-                            enabled: existingEnabledByName.get(tool.name) ?? 1,
-                        }))
-                    )
-                    .run();
             });
 
             console.log(`[McpManager] Synced ${tools.length} tools for server ${serverId}`);

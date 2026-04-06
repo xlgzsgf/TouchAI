@@ -1,5 +1,6 @@
 // Copyright (c) 2026. Qian Cheng. Licensed under GPL v3
 
+import { type DatabaseExecutor, db } from '@database';
 import {
     createMessage,
     createMessageAttachment,
@@ -12,6 +13,7 @@ import {
     updateSessionTurnAttempt,
 } from '@database/queries';
 import type { MessageRole, ToolLogKind, TurnStatus } from '@database/schema';
+import type { AttachmentEntity } from '@database/types';
 import type {
     SessionTurnAttemptEntity,
     SessionTurnEntity,
@@ -216,20 +218,40 @@ export class PersistenceProjector {
      * 记录轮次开始阶段：先记录用户消息，再创建流式处理中状态的轮次与首次尝试记录。
      */
     async recordTurnStart(initialCheckpoint: AttemptCheckpoint): Promise<void> {
-        await this.syncSessionIdentity();
+        const result = await db.transaction(async (tx) => {
+            await this.syncSessionIdentity(tx);
 
-        if (!this.userMessageId) {
-            this.userMessageId = await this.persistMessage(
-                'user',
-                this.prompt,
-                null,
-                null,
-                this.attachments
-            );
-        }
+            const persistedAttachments =
+                this.userMessageId || this.attachments.length === 0
+                    ? []
+                    : await Promise.all(
+                          this.attachments.map((attachment) =>
+                              ensurePersistedAttachmentIndex(attachment, tx)
+                          )
+                      );
 
-        await this.ensureTurnRecord();
-        await this.ensureAttemptRecord(1, initialCheckpoint);
+            const sessionId = await this.ensureSessionId(tx);
+            const userMessageId =
+                this.userMessageId ??
+                (await this.persistMessage(
+                    'user',
+                    this.prompt,
+                    null,
+                    null,
+                    persistedAttachments,
+                    tx,
+                    sessionId
+                ));
+            const turn = await this.ensureTurnRecord(tx, sessionId, userMessageId);
+            const attemptState = await this.ensureAttemptRecord(1, initialCheckpoint, tx, turn.id);
+
+            return { sessionId, userMessageId, turn, attemptState };
+        });
+
+        this.sessionId = result.sessionId;
+        this.userMessageId = result.userMessageId;
+        this.turn = result.turn;
+        this.attemptState = result.attemptState;
     }
 
     /**
@@ -237,18 +259,37 @@ export class PersistenceProjector {
      */
     async markCompleted(options: CompleteTurnOptions): Promise<void> {
         try {
-            if (options.response.trim() && !this.assistantMessageId) {
-                this.assistantMessageId = await this.persistMessage('assistant', options.response);
-            }
+            const result = await db.transaction(async (tx) => {
+                const assistantMessageId =
+                    options.response.trim() && !this.assistantMessageId
+                        ? await this.persistMessage(
+                              'assistant',
+                              options.response,
+                              null,
+                              null,
+                              [],
+                              tx
+                          )
+                        : this.assistantMessageId;
 
-            await this.finishCurrentAttempt('completed');
-            await this.patchTurn({
-                status: 'completed',
-                error_message: null,
-                response_message_id: this.assistantMessageId,
-                tokens_used: options.tokensUsed ?? null,
-                duration_ms: options.durationMs,
+                const attemptState = await this.finishCurrentAttempt('completed', null, tx);
+                const turn = await this.patchTurn(
+                    {
+                        status: 'completed',
+                        error_message: null,
+                        response_message_id: assistantMessageId,
+                        tokens_used: options.tokensUsed ?? null,
+                        duration_ms: options.durationMs,
+                    },
+                    tx
+                );
+
+                return { assistantMessageId, attemptState, turn };
             });
+
+            this.assistantMessageId = result.assistantMessageId;
+            this.attemptState = result.attemptState;
+            this.turn = result.turn;
         } catch (error) {
             console.error('[PersistenceProjector] Failed to mark turn as completed:', error);
             throw error;
@@ -260,17 +301,36 @@ export class PersistenceProjector {
      */
     async markFailed(errorMessage: string, partialResponse?: string): Promise<void> {
         try {
-            if (partialResponse?.trim() && !this.assistantMessageId) {
-                this.assistantMessageId = await this.persistMessage('assistant', partialResponse);
-            }
+            const result = await db.transaction(async (tx) => {
+                const assistantMessageId =
+                    partialResponse?.trim() && !this.assistantMessageId
+                        ? await this.persistMessage(
+                              'assistant',
+                              partialResponse,
+                              null,
+                              null,
+                              [],
+                              tx
+                          )
+                        : this.assistantMessageId;
 
-            await this.finishCurrentAttempt('failed', errorMessage);
-            await this.patchTurn({
-                status: 'failed',
-                error_message: errorMessage,
-                response_message_id: this.assistantMessageId,
-                duration_ms: this.getTurnDurationMs(),
+                const attemptState = await this.finishCurrentAttempt('failed', errorMessage, tx);
+                const turn = await this.patchTurn(
+                    {
+                        status: 'failed',
+                        error_message: errorMessage,
+                        response_message_id: assistantMessageId,
+                        duration_ms: this.getTurnDurationMs(),
+                    },
+                    tx
+                );
+
+                return { assistantMessageId, attemptState, turn };
             });
+
+            this.assistantMessageId = result.assistantMessageId;
+            this.attemptState = result.attemptState;
+            this.turn = result.turn;
         } catch (error) {
             console.error('[PersistenceProjector] Failed to mark turn as failed:', error);
             throw error;
@@ -282,17 +342,40 @@ export class PersistenceProjector {
      */
     async markCancelled(partialResponse?: string): Promise<void> {
         try {
-            if (partialResponse?.trim() && !this.assistantMessageId) {
-                this.assistantMessageId = await this.persistMessage('assistant', partialResponse);
-            }
+            const result = await db.transaction(async (tx) => {
+                const assistantMessageId =
+                    partialResponse?.trim() && !this.assistantMessageId
+                        ? await this.persistMessage(
+                              'assistant',
+                              partialResponse,
+                              null,
+                              null,
+                              [],
+                              tx
+                          )
+                        : this.assistantMessageId;
 
-            await this.finishCurrentAttempt('cancelled', 'Cancelled by user');
-            await this.patchTurn({
-                status: 'cancelled',
-                error_message: 'Cancelled by user',
-                response_message_id: this.assistantMessageId,
-                duration_ms: this.getTurnDurationMs(),
+                const attemptState = await this.finishCurrentAttempt(
+                    'cancelled',
+                    'Cancelled by user',
+                    tx
+                );
+                const turn = await this.patchTurn(
+                    {
+                        status: 'cancelled',
+                        error_message: 'Cancelled by user',
+                        response_message_id: assistantMessageId,
+                        duration_ms: this.getTurnDurationMs(),
+                    },
+                    tx
+                );
+
+                return { assistantMessageId, attemptState, turn };
             });
+
+            this.assistantMessageId = result.assistantMessageId;
+            this.attemptState = result.attemptState;
+            this.turn = result.turn;
         } catch (error) {
             console.error('[PersistenceProjector] Failed to mark turn as cancelled:', error);
             throw error;
@@ -304,30 +387,43 @@ export class PersistenceProjector {
      */
     async beginNextAttempt(errorMessage: string, checkpoint: AttemptCheckpoint): Promise<void> {
         try {
-            await this.finishCurrentAttempt('failed', errorMessage);
+            const result = await db.transaction(async (tx) => {
+                await this.finishCurrentAttempt('failed', errorMessage, tx);
 
-            const nextAttemptIndex = (this.attemptState?.entity.attempt_index ?? 0) + 1;
-            const startedAt = Date.now();
-            const startedAtText = toDbTimestamp(new Date(startedAt));
-            const nextAttempt = await createSessionTurnAttempt({
-                turn_id: this.getTurnId(),
-                attempt_index: nextAttemptIndex,
-                max_retries: this.maxRetries,
-                status: 'streaming',
-                checkpoint_json: serializeCheckpoint(checkpoint),
-                started_at: startedAtText,
-                created_at: startedAtText,
-                updated_at: startedAtText,
+                const nextAttemptIndex = (this.attemptState?.entity.attempt_index ?? 0) + 1;
+                const startedAt = Date.now();
+                const startedAtText = toDbTimestamp(new Date(startedAt));
+                const nextAttempt = await createSessionTurnAttempt(
+                    {
+                        turn_id: this.getTurnId(),
+                        attempt_index: nextAttemptIndex,
+                        max_retries: this.maxRetries,
+                        status: 'streaming',
+                        checkpoint_json: serializeCheckpoint(checkpoint),
+                        started_at: startedAtText,
+                        created_at: startedAtText,
+                        updated_at: startedAtText,
+                    },
+                    tx
+                );
+
+                const attemptState = new AttemptState(nextAttempt, startedAt);
+                let turn = this.turn;
+                if (this.turn?.status !== 'streaming' || this.turn?.error_message !== null) {
+                    turn = await this.patchTurn(
+                        {
+                            status: 'streaming',
+                            error_message: null,
+                        },
+                        tx
+                    );
+                }
+
+                return { attemptState, turn };
             });
 
-            this.attemptState = new AttemptState(nextAttempt, startedAt);
-            // 仅当状态或错误信息需要变化时才更新轮次
-            if (this.turn?.status !== 'streaming' || this.turn?.error_message !== null) {
-                await this.patchTurn({
-                    status: 'streaming',
-                    error_message: null,
-                });
-            }
+            this.attemptState = result.attemptState;
+            this.turn = result.turn;
         } catch (error) {
             console.error('[PersistenceProjector] Failed to begin next attempt:', error);
             throw error;
@@ -372,23 +468,27 @@ export class PersistenceProjector {
             return;
         }
 
-        await updateSessionTurnAttempt({
-            id: this.attemptState.entity.id,
-            attemptPatch: {
-                checkpoint_json: serializeCheckpoint(checkpoint),
-            },
+        const checkpointJson = serializeCheckpoint(checkpoint);
+        await db.transaction(async (tx) => {
+            await updateSessionTurnAttempt({
+                id: this.attemptState!.entity.id,
+                attemptPatch: {
+                    checkpoint_json: checkpointJson,
+                },
+                database: tx,
+            });
         });
 
         this.attemptState = new AttemptState(
             {
                 ...this.attemptState.entity,
-                checkpoint_json: serializeCheckpoint(checkpoint),
+                checkpoint_json: checkpointJson,
             },
             this.attemptState.startedAtMs
         );
     }
 
-    private async ensureSessionId(): Promise<number> {
+    private async ensureSessionId(database: DatabaseExecutor = db): Promise<number> {
         if (this.sessionId) {
             return this.sessionId;
         }
@@ -398,12 +498,15 @@ export class PersistenceProjector {
         }
 
         // 并发写入可能同时触发懒创建，这里用单实例 Promise 锁保证只落一条 session。
-        const sessionCreationPromise = createSession({
-            session_id: crypto.randomUUID(),
-            title: this.buildSessionTitle(this.prompt),
-            model: this.model.model_id,
-            provider_id: this.model.provider_id,
-        }).then((session) => {
+        const sessionCreationPromise = createSession(
+            {
+                session_id: crypto.randomUUID(),
+                title: this.buildSessionTitle(this.prompt),
+                model: this.model.model_id,
+                provider_id: this.model.provider_id,
+            },
+            database
+        ).then((session) => {
             this.sessionId = session.id;
             return session.id;
         });
@@ -423,7 +526,7 @@ export class PersistenceProjector {
      * `useAgent` 可能会先按“当前选中的标签”预创建会话，
      * 等真正解析出默认模型后，再由持久化层把会话的模型和提供方校准成最终值。
      */
-    private async syncSessionIdentity(): Promise<void> {
+    private async syncSessionIdentity(database: DatabaseExecutor = db): Promise<void> {
         if (!this.sessionId) {
             return;
         }
@@ -435,6 +538,7 @@ export class PersistenceProjector {
                     model: this.model.model_id,
                     provider_id: this.model.provider_id,
                 },
+                database,
             });
         } catch (error) {
             console.error('[PersistenceProjector] Failed to sync session identity:', error);
@@ -446,90 +550,116 @@ export class PersistenceProjector {
         content: string,
         toolLogId?: number | null,
         toolLogKind?: ToolLogKind | null,
-        attachments: AttachmentIndex[] = []
+        attachments: Array<AttachmentIndex | AttachmentEntity> = [],
+        database: DatabaseExecutor = db,
+        sessionId?: number
     ): Promise<number> {
-        const sessionId = await this.ensureSessionId();
+        const resolvedSessionId = sessionId ?? (await this.ensureSessionId(database));
 
-        const message = await createMessage({
-            session_id: sessionId,
-            role: role as MessageRole,
-            content,
-            tool_log_id: toolLogId ?? null,
-            tool_log_kind: toolLogKind ?? null,
-        });
+        const message = await createMessage(
+            {
+                session_id: resolvedSessionId,
+                role: role as MessageRole,
+                content,
+                tool_log_id: toolLogId ?? null,
+                tool_log_kind: toolLogKind ?? null,
+            },
+            database
+        );
 
-        await refreshSessionMetadata(sessionId);
+        await refreshSessionMetadata(resolvedSessionId, database);
 
         if (role === 'user' && attachments.length > 0) {
             const persisted = await Promise.all(
-                attachments.map((attachment) => ensurePersistedAttachmentIndex(attachment))
+                attachments.map((attachment) =>
+                    'attachmentId' in attachment || !('original_name' in attachment)
+                        ? ensurePersistedAttachmentIndex(attachment as AttachmentIndex, database)
+                        : Promise.resolve(attachment as AttachmentEntity)
+                )
             );
 
             for (const [index, entity] of persisted.entries()) {
-                await createMessageAttachment({
-                    message_id: message.id,
-                    attachment_id: entity.id,
-                    sort_order: index,
-                });
+                await createMessageAttachment(
+                    {
+                        message_id: message.id,
+                        attachment_id: entity.id,
+                        sort_order: index,
+                    },
+                    database
+                );
             }
         }
 
         return message.id;
     }
 
-    private async ensureTurnRecord(): Promise<void> {
+    private async ensureTurnRecord(
+        database: DatabaseExecutor = db,
+        sessionId?: number,
+        promptMessageId?: number | null
+    ): Promise<SessionTurnEntity> {
         if (this.turn) {
-            return;
+            return this.turn;
         }
 
-        const sessionId = await this.ensureSessionId();
+        const resolvedSessionId = sessionId ?? (await this.ensureSessionId(database));
 
         const startedAt = Date.now();
 
-        this.turn = await createSessionTurn({
-            session_id: sessionId,
-            model_id: this.model.id,
-            task_id: this.taskId,
-            execution_mode: this.executionMode,
-            prompt_snapshot_json: JSON.stringify(this.promptSnapshot),
-            prompt_message_id: this.userMessageId,
-            response_message_id: null, // 轮次开始时还没有助手回复
-            status: 'streaming',
-        });
+        const turn = await createSessionTurn(
+            {
+                session_id: resolvedSessionId,
+                model_id: this.model.id,
+                task_id: this.taskId,
+                execution_mode: this.executionMode,
+                prompt_snapshot_json: JSON.stringify(this.promptSnapshot),
+                prompt_message_id: promptMessageId ?? this.userMessageId,
+                response_message_id: null,
+                status: 'streaming',
+            },
+            database
+        );
         this.turnStartedAtMs = startedAt;
+        return turn;
     }
 
     private async ensureAttemptRecord(
         attemptIndex: number,
-        checkpoint: AttemptCheckpoint
-    ): Promise<void> {
+        checkpoint: AttemptCheckpoint,
+        database: DatabaseExecutor = db,
+        turnId?: number
+    ): Promise<AttemptState> {
         if (this.attemptState) {
-            return;
+            return this.attemptState;
         }
 
-        await this.ensureTurnRecord();
+        const resolvedTurnId = turnId ?? this.getTurnId();
         const startedAt = Date.now();
         const startedAtText = toDbTimestamp(new Date(startedAt));
 
-        const attempt = await createSessionTurnAttempt({
-            turn_id: this.getTurnId(),
-            attempt_index: attemptIndex,
-            max_retries: this.maxRetries,
-            status: 'streaming',
-            checkpoint_json: serializeCheckpoint(checkpoint),
-            started_at: startedAtText,
-            created_at: startedAtText,
-            updated_at: startedAtText,
-        });
-        this.attemptState = new AttemptState(attempt, startedAt);
+        const attempt = await createSessionTurnAttempt(
+            {
+                turn_id: resolvedTurnId,
+                attempt_index: attemptIndex,
+                max_retries: this.maxRetries,
+                status: 'streaming',
+                checkpoint_json: serializeCheckpoint(checkpoint),
+                started_at: startedAtText,
+                created_at: startedAtText,
+                updated_at: startedAtText,
+            },
+            database
+        );
+        return new AttemptState(attempt, startedAt);
     }
 
     private async finishCurrentAttempt(
         status: TurnStatus,
-        errorMessage: string | null = null
-    ): Promise<void> {
+        errorMessage: string | null = null,
+        database: DatabaseExecutor = db
+    ): Promise<AttemptState | null> {
         if (!this.attemptState) {
-            return;
+            return null;
         }
 
         const finishedAt = Date.now();
@@ -545,10 +675,10 @@ export class PersistenceProjector {
                 finished_at: finishedAtText,
                 updated_at: finishedAtText,
             },
+            database,
         });
 
-        // 更新本地状态缓存
-        this.attemptState = new AttemptState(
+        return new AttemptState(
             {
                 ...this.attemptState.entity,
                 status,
@@ -575,21 +705,26 @@ export class PersistenceProjector {
             : Math.max(0, Date.now() - this.turnStartedAtMs);
     }
 
-    private async patchTurn(patch: SessionTurnUpdateData): Promise<void> {
+    private async patchTurn(
+        patch: SessionTurnUpdateData,
+        database: DatabaseExecutor = db
+    ): Promise<SessionTurnEntity | null> {
         if (!this.turn) {
-            await this.ensureTurnRecord();
+            const turn = await this.ensureTurnRecord(database);
+            this.turn = turn;
         }
 
         if (!this.turn) {
-            return;
+            return null;
         }
 
         try {
             await updateSessionTurn({
                 id: this.turn.id,
                 turnPatch: patch,
+                database,
             });
-            this.turn = {
+            return {
                 ...this.turn,
                 ...patch,
             };
@@ -598,6 +733,7 @@ export class PersistenceProjector {
                 '[PersistenceProjector] Failed to update session turn record:',
                 persistError
             );
+            return this.turn;
         }
     }
 }

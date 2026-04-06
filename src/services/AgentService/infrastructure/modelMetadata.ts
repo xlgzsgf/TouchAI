@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2025-2026. Qian Cheng. Licensed under GPL v3
  */
 
@@ -166,24 +166,22 @@ export async function updateModelMetadata(): Promise<void> {
         const metadataList = parseRawData(rawData);
         const filteredList = deduplicateMetadata(metadataList);
 
-        const drizzle = db.getDb();
-        await drizzle.transaction(async (tx) => {
+        await db.transaction(async (tx) => {
             await tx.delete(llmMetadata).run();
 
-            if (filteredList.length === 0) {
-                return;
+            if (filteredList.length > 0) {
+                await tx
+                    .insert(llmMetadata)
+                    .values(filteredList)
+                    .onConflictDoNothing({ target: llmMetadata.model_id })
+                    .run();
             }
 
-            await tx
-                .insert(llmMetadata)
-                .values(filteredList)
-                .onConflictDoNothing({ target: llmMetadata.model_id })
-                .run();
-        });
-
-        await setStatistic({
-            key: StatisticKey.MODEL_METADATA_LAST_UPDATED_AT,
-            value: new Date().toISOString(),
+            await setStatistic({
+                key: StatisticKey.MODEL_METADATA_LAST_UPDATED_AT,
+                value: new Date().toISOString(),
+                database: tx,
+            });
         });
     } catch (error) {
         console.error('[ModelMetadata] Failed to update metadata:', error);

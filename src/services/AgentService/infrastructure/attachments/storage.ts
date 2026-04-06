@@ -2,6 +2,7 @@
  * Copyright (c) 2026. Qian Cheng. Licensed under GPL v3
  */
 
+import { type DatabaseExecutor, db } from '@database';
 import {
     createAttachmentRecord,
     findAttachmentByHash,
@@ -111,7 +112,8 @@ async function buildAttachmentStoragePath(
 
 async function ensureAttachmentRecord(
     type: AttachmentIndex['type'],
-    path: string
+    path: string,
+    database: DatabaseExecutor = db
 ): Promise<AttachmentEntity> {
     const [hash, name, mimeType, size] = await Promise.all([
         computeAttachmentHash(path),
@@ -120,7 +122,7 @@ async function ensureAttachmentRecord(
         getFileSize(path),
     ]);
 
-    const existing = await findAttachmentByHash(hash);
+    const existing = await findAttachmentByHash(hash, database);
     if (existing) {
         return existing;
     }
@@ -129,15 +131,18 @@ async function ensureAttachmentRecord(
     await copyFile(path, targetPath);
 
     try {
-        return await createAttachmentRecord({
-            hash,
-            type,
-            original_name: name,
-            mime_type: mimeType ?? null,
-            size,
-        });
+        return await createAttachmentRecord(
+            {
+                hash,
+                type,
+                original_name: name,
+                mime_type: mimeType ?? null,
+                size,
+            },
+            database
+        );
     } catch (error) {
-        const duplicated = await findAttachmentByHash(hash);
+        const duplicated = await findAttachmentByHash(hash, database);
         if (duplicated) {
             return duplicated;
         }
@@ -230,7 +235,8 @@ export async function hydratePersistedAttachments(
  * @returns 可写入 message_attachments 的附件记录。
  */
 export async function ensurePersistedAttachmentIndex(
-    attachment: AttachmentIndex
+    attachment: AttachmentIndex,
+    database: DatabaseExecutor = db
 ): Promise<AttachmentEntity> {
     if (attachment.attachmentId && attachment.hash) {
         return {
@@ -244,7 +250,7 @@ export async function ensurePersistedAttachmentIndex(
         };
     }
 
-    const persisted = await ensureAttachmentRecord(attachment.type, attachment.path);
+    const persisted = await ensureAttachmentRecord(attachment.type, attachment.path, database);
     attachment.attachmentId = persisted.id;
     attachment.hash = persisted.hash;
     attachment.path = await buildAttachmentStoragePath(persisted.type, persisted.hash);

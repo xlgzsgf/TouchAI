@@ -7,6 +7,7 @@
     import { useAlert } from '@composables/useAlert.ts';
     import { useContextMenu } from '@composables/useContextMenu.ts';
     import { useScrollbarStabilizer } from '@composables/useScrollbarStabilizer';
+    import { db } from '@database';
     import {
         createModel,
         createModels,
@@ -465,17 +466,13 @@
                 return;
             }
 
-            if (newModels.length > 0) {
-                await createModels(newModels);
-            }
+            await db.transaction(async (tx) => {
+                if (newModels.length > 0) {
+                    await createModels(newModels, tx);
+                }
 
-            // 避免展示错误
-            if (refreshingProviderId.value !== currentProviderId) {
-                return;
-            }
-
-            // 批量同步所有模型的元数据（从 llm_metadata 表匹配写入）
-            await syncAllModelsMetadata();
+                await syncAllModelsMetadata(tx);
+            });
 
             // 避免展示错误
             if (refreshingProviderId.value !== currentProviderId) {
