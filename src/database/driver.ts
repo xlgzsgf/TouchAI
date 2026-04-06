@@ -263,15 +263,22 @@ function mapQueryResponse(
     method: DatabaseQueryMethod,
     rows: Array<Record<string, unknown>>
 ): ProxyQueryResult {
+    if (method === 'get') {
+        if (rows.length === 0) {
+            // Drizzle 的 sqlite-proxy `get()` 在空结果时要求拿到一个 falsy 行，
+            // 否则会把空数组当成“存在一行但每列都是 undefined”来映射。
+            return { rows: undefined as unknown as unknown[] };
+        }
+
+        const keys = resolveProjectionKeys(sql, rows[0]!);
+        return { rows: mapObjectRowToArray(rows[0]!, keys) };
+    }
+
     if (rows.length === 0) {
         return { rows: [] };
     }
 
     const keys = resolveProjectionKeys(sql, rows[0]!);
-
-    if (method === 'get') {
-        return { rows: mapObjectRowToArray(rows[0]!, keys) };
-    }
 
     return {
         rows: rows.map((row) => mapObjectRowToArray(row, keys)),
