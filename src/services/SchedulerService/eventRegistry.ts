@@ -15,9 +15,7 @@ class EventTriggerRegistry {
      */
     register(handler: EventTriggerHandler): void {
         if (this.handlers.has(handler.eventType)) {
-            console.warn(
-                `[EventTriggerRegistry] Overwriting handler for ${handler.eventType}`
-            );
+            console.warn(`[EventTriggerRegistry] Overwriting handler for ${handler.eventType}`);
         }
         this.handlers.set(handler.eventType, handler);
     }
@@ -40,10 +38,7 @@ class EventTriggerRegistry {
      * 设置事件触发器
      * @returns 清理函数
      */
-    async setupEventTrigger(
-        trigger: EventTrigger,
-        callback: () => void
-    ): Promise<() => void> {
+    async setupEventTrigger(trigger: EventTrigger, callback: () => void): Promise<() => void> {
         const handler = this.handlers.get(trigger.eventType);
 
         if (!handler) {

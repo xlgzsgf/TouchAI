@@ -1,5 +1,8 @@
 // Copyright (c) 2026. Qian Cheng. Licensed under GPL v3
 
+import { eventService } from '@/services/EventService';
+import { AppEvent } from '@/services/EventService/types';
+
 import { AiError, AiErrorCode } from '../contracts/errors';
 import type { ConversationRuntimeEnvironment, TurnEvent } from '../execution';
 import { AiRequestExecutor } from '../execution/executor';
@@ -10,6 +13,7 @@ import { loadSessionHistory } from '../session/history';
 import { SessionTaskProjection } from './projection';
 import type {
     SessionTaskSnapshot,
+    SessionTaskStatus,
     StartedSessionTask,
     StartSessionTaskOptions,
     TaskSnapshotListener,
@@ -26,6 +30,8 @@ interface MutableSessionTask {
     projection: SessionTaskProjection;
     completion: Promise<ExecuteRequestResult> | null;
     releaseTimer: ReturnType<typeof setTimeout> | null;
+    lastPublishedStatus: SessionTaskStatus | null;
+    lastPublishedSessionId: number | null;
 }
 
 const TERMINAL_TASK_RETENTION_MS = 5 * 60 * 1000;
@@ -120,6 +126,8 @@ class SessionTaskCenter {
             projection,
             completion: null,
             releaseTimer: null,
+            lastPublishedStatus: null,
+            lastPublishedSessionId: null,
         };
 
         this.tasks.set(taskId, task);
@@ -281,6 +289,27 @@ class SessionTaskCenter {
         return task ? cloneTaskSnapshot(task.snapshot) : null;
     }
 
+    getSessionStatus(sessionId: number): {
+        status: SessionTaskStatus;
+        taskId: string;
+    } | null {
+        const taskId = this.sessionActiveTaskIndex.get(sessionId);
+        if (!taskId) {
+            return null;
+        }
+
+        const task = this.tasks.get(taskId);
+        if (!task) {
+            this.sessionActiveTaskIndex.delete(sessionId);
+            return null;
+        }
+
+        return {
+            status: task.snapshot.status,
+            taskId: task.taskId,
+        };
+    }
+
     listActiveTasks(): SessionTaskSnapshot[] {
         return Array.from(this.tasks.values())
             .filter((task) => !isTerminalStatus(task.snapshot.status))
@@ -435,6 +464,8 @@ class SessionTaskCenter {
             return;
         }
 
+        this.publishTaskStatusIfNeeded(task);
+
         for (const listener of task.subscribers) {
             try {
                 listener(cloneTaskSnapshot(task.snapshot));
@@ -442,6 +473,32 @@ class SessionTaskCenter {
                 console.error('[SessionTaskCenter] Subscriber error:', error);
             }
         }
+    }
+
+    /**
+     * 只在状态或所属会话发生变化时发布事件，避免流式 chunk 期间重复刷事件总线。
+     */
+    private publishTaskStatusIfNeeded(task: MutableSessionTask): void {
+        if (task.sessionId === null) {
+            return;
+        }
+
+        const sessionChanged = task.lastPublishedSessionId !== task.sessionId;
+        const statusChanged = task.lastPublishedStatus !== task.snapshot.status;
+        if (!sessionChanged && !statusChanged) {
+            return;
+        }
+
+        const previousStatus = sessionChanged ? null : task.lastPublishedStatus;
+        task.lastPublishedSessionId = task.sessionId;
+        task.lastPublishedStatus = task.snapshot.status;
+
+        void eventService.emit(AppEvent.SESSION_TASK_STATUS_CHANGED, {
+            sessionId: task.sessionId,
+            taskId: task.taskId,
+            status: task.snapshot.status,
+            previousStatus,
+        });
     }
 }
 

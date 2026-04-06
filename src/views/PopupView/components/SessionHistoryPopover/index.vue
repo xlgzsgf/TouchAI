@@ -96,16 +96,20 @@
                                             {{ segment.text }}
                                         </span>
                                     </p>
-                                    <div
-                                        v-if="getSessionStatus(session.id) === 'running'"
-                                        class="border-primary-500 h-3 w-3 animate-spin rounded-full border-2 border-t-transparent"
-                                    ></div>
-                                    <div
-                                        v-else-if="
-                                            getSessionStatus(session.id) === 'waiting_approval'
-                                        "
-                                        class="h-2 w-2 rounded-full bg-blue-500"
-                                    ></div>
+                                    <div v-if="getSessionStatus(session.id)" class="shrink-0">
+                                        <div
+                                            v-if="getSessionStatus(session.id) === 'running'"
+                                            title="运行中"
+                                            class="border-primary-500 h-3 w-3 animate-spin rounded-full border-2 border-t-transparent"
+                                        ></div>
+                                        <div
+                                            v-else-if="
+                                                getSessionStatus(session.id) === 'waiting_approval'
+                                            "
+                                            title="等待审批"
+                                            class="h-2 w-2 rounded-full bg-blue-500"
+                                        ></div>
+                                    </div>
                                 </div>
 
                                 <p
