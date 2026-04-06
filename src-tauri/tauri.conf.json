@@ -50,23 +50,10 @@
         },
         "withGlobalTauri": true
     },
-    "plugins": {
-        "sql": {
-            "scope": {
-                "allowed": [
-                    {
-                        "path": "../data/touchai.db"
-                    },
-                    {
-                        "path": "./data/touchai.db"
-                    }
-                ]
-            }
-        }
-    },
     "bundle": {
         "active": true,
         "targets": "all",
+        "resources": ["../src/database/drizzle", "../src/database/artifacts"],
         "icon": [
             "icons/32x32.png",
             "icons/128x128.png",

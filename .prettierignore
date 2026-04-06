@@ -6,7 +6,7 @@ build/
 coverage/
 
 # Drizzle 生成的迁移文件
-drizzle/
+src/database/drizzle/
 
 # 配置文件（保持原样）
 *.config.js
