@@ -188,8 +188,23 @@ export function initializeBuiltInPopups(): void {
         component: SessionHistoryPopover,
         returnFocusToMainWindowOnFocus: false,
         calculatePosition: (triggerElement, mainWindow, dimensions) => {
-            const x = calculateRightAlignedPopupX(triggerElement, mainWindow, dimensions.width);
-            const y = calculateTriggerAnchoredPopupY(triggerElement, mainWindow, dimensions.height);
+            // 判断是否是搜索框状态
+            const isSearchViewContainer =
+                triggerElement.classList.contains('search-view-container');
+
+            let x: number;
+            let y: number;
+
+            if (isSearchViewContainer) {
+                // 搜索框状态：左对齐，贴窗口边缘
+                x = mainWindow.position.x - SHADOW_WIDTH;
+                y = calculateWindowEdgePopupY(triggerElement, mainWindow, dimensions.height);
+            } else {
+                // 会话面板状态：右对齐，锚定在触发元素
+                x = calculateRightAlignedPopupX(triggerElement, mainWindow, dimensions.width);
+                y = calculateTriggerAnchoredPopupY(triggerElement, mainWindow, dimensions.height);
+            }
+
             return { x, y };
         },
     });
