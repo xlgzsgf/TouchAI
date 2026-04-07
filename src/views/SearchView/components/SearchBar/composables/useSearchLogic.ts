@@ -4,7 +4,10 @@ import '../tags';
 import { Editor } from '@tiptap/vue-3';
 import { type Ref, ref, shallowRef, watch } from 'vue';
 
-import type { Index } from '@/services/AgentService/infrastructure/attachments';
+import {
+    buildAttachmentPromptMetas,
+    type Index,
+} from '@/services/AgentService/infrastructure/attachments';
 
 import {
     ATTACHMENT_TAG_NODE,
@@ -362,9 +365,10 @@ export function useSearchInput(
         runControlledTagSync(() => insertModelTag(ed, nextTag));
     }
 
-    function toAttachmentTagAttrs(attachment: Index): AttachmentTagAttrs {
+    function toAttachmentTagAttrs(attachment: Index, alias: string): AttachmentTagAttrs {
         return {
             attachmentId: attachment.id,
+            alias,
             fileName: attachment.name,
             fileType: attachment.type,
             preview: attachment.preview,
@@ -375,6 +379,7 @@ export function useSearchInput(
     function isSameAttachmentTag(current: AttachmentTagAttrs, next: AttachmentTagAttrs) {
         return (
             current.attachmentId === next.attachmentId &&
+            current.alias === next.alias &&
             current.fileName === next.fileName &&
             current.fileType === next.fileType &&
             current.preview === next.preview &&
@@ -397,7 +402,10 @@ export function useSearchInput(
         const currentById = new Map<string, AttachmentTagAttrs>(
             currentTags.map((tag) => [tag.attachmentId, tag])
         );
-        const nextTags = attachments.value.map(toAttachmentTagAttrs);
+        const metas = buildAttachmentPromptMetas(attachments.value);
+        const nextTags = attachments.value.map((attachment, index) =>
+            toAttachmentTagAttrs(attachment, metas[index]!.alias)
+        );
         const nextById = new Map<string, AttachmentTagAttrs>(
             nextTags.map((tag) => [tag.attachmentId, tag])
         );

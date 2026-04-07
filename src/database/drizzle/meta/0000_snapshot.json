@@ -35,6 +35,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "origin_path": {
+          "name": "origin_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "mime_type": {
           "name": "mime_type",
           "type": "text",
@@ -818,6 +825,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "origin_path": {
+          "name": "origin_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",

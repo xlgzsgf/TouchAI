@@ -20,6 +20,7 @@ export interface UseAiRequestOptions {
     onComplete?: (response: string) => void;
     onError?: (error: Error) => void;
     onModelSelected?: (target: { modelId: string; providerId: number }) => void;
+    onTurnStarted?: (target: { sessionId: number; turnId: number }) => void;
 }
 
 /**
@@ -55,6 +56,7 @@ export function useAgent(options: UseAiRequestOptions = {}) {
     } = useAgentState({
         onChunk: options.onChunk,
         onModelSelected: options.onModelSelected,
+        onTurnStarted: options.onTurnStarted,
     });
 
     const isLoading = computed(() => isStartingTask.value || isTaskLoading.value);

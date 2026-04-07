@@ -111,6 +111,7 @@ export const attachments = sqliteTable('attachments', {
     hash: text('hash').notNull().unique(),
     type: text('type', { enum: ['image', 'file'] }).notNull(),
     original_name: text('original_name').notNull(),
+    origin_path: text('origin_path').notNull(),
     mime_type: text('mime_type'),
     size: integer('size'),
     created_at: text('created_at')
@@ -130,6 +131,7 @@ export const messageAttachments = sqliteTable('message_attachments', {
         .notNull()
         .references(() => attachments.id, { onDelete: 'cascade' }),
     sort_order: integer('sort_order').notNull().default(0),
+    origin_path: text('origin_path').notNull(),
     created_at: text('created_at')
         .notNull()
         .default(sql`(datetime('now'))`),

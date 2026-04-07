@@ -12,7 +12,11 @@ import {
     type UserContent,
 } from 'ai';
 
-import type { AiContentPart, AiMessage } from '@/services/AgentService/contracts/protocol';
+import type {
+    AiContentPart,
+    AiMessage,
+    AttachmentPromptMeta,
+} from '@/services/AgentService/contracts/protocol';
 import type { AiToolDefinition } from '@/services/AgentService/contracts/tooling';
 import { safeParseJsonWithSchema, z } from '@/utils/zod';
 
@@ -23,9 +27,16 @@ const unknownJsonSchema = z.unknown();
 /**
  * 把文件附件降级成文本块，避免各家 SDK 的文件协议差异把会话历史打碎。
  */
-function renderFilePart(name: string, content: string, isBinary: boolean): string {
-    const header = `[文件: ${name}]`;
-    return isBinary ? `${header}\n(二进制 Base64)\n${content}` : `${header}\n${content}`;
+function renderFilePart(
+    name: string,
+    content: string,
+    isBinary: boolean,
+    meta?: AttachmentPromptMeta
+): string {
+    const header = meta
+        ? `[Attachment ${meta.alias} content${isBinary ? ' | binary base64' : ''}]`
+        : `[文件: ${name}]`;
+    return isBinary && !meta ? `${header}\n(二进制 Base64)\n${content}` : `${header}\n${content}`;
 }
 
 function parseToolCallArguments(argumentsJson: string): unknown {
@@ -53,7 +64,7 @@ function mapUserParts(content: AiContentPart[]): UserContent {
         if (part.type === 'file') {
             parts.push({
                 type: 'text',
-                text: renderFilePart(part.name, part.content, part.isBinary),
+                text: renderFilePart(part.name, part.content, part.isBinary, part.meta),
             });
         }
     }
@@ -77,7 +88,7 @@ function mapAssistantTextParts(
             return [
                 {
                     type: 'text' as const,
-                    text: renderFilePart(part.name, part.content, part.isBinary),
+                    text: renderFilePart(part.name, part.content, part.isBinary, part.meta),
                 },
             ];
         }

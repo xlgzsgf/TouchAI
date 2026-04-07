@@ -3,6 +3,7 @@ CREATE TABLE `attachments` (
 	`hash` text NOT NULL,
 	`type` text NOT NULL,
 	`original_name` text NOT NULL,
+	`origin_path` text NOT NULL,
 	`mime_type` text,
 	`size` integer,
 	`created_at` text DEFAULT (datetime('now')) NOT NULL
@@ -116,6 +117,7 @@ CREATE TABLE `message_attachments` (
 	`message_id` integer NOT NULL,
 	`attachment_id` integer NOT NULL,
 	`sort_order` integer DEFAULT 0 NOT NULL,
+	`origin_path` text NOT NULL,
 	`created_at` text DEFAULT (datetime('now')) NOT NULL,
 	FOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`attachment_id`) REFERENCES `attachments`(`id`) ON UPDATE no action ON DELETE cascade

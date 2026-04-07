@@ -107,7 +107,7 @@
     }
 
     .search-tag-chip--image .search-tag-content {
-        gap: 0;
+        gap: 0.25rem;
     }
 
     .attachment-tag-preview {

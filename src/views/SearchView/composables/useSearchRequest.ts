@@ -165,6 +165,13 @@ export function useSearchRequestFlow(options: UseSearchRequestFlowOptions) {
                 };
             }
         },
+        onTurnStarted: () => {
+            // 只有 turn 真正落库后，sessions.last_message_at / updated_at 才会刷新。
+            // 在这一拍作废缓存，历史列表才能立刻按最新时间重排，而不是等整轮结束。
+            invalidateSessionListCache({
+                refreshIfOpen: true,
+            });
+        },
     });
 
     void eventService
@@ -355,7 +362,7 @@ export function useSearchRequestFlow(options: UseSearchRequestFlowOptions) {
 
     function startNewSession() {
         clearSessionState();
-        clearDraft({ preserveModelTag: true });
+        clearDraft();
     }
 
     async function openSession(sessionId: number): Promise<LoadedSessionInfo> {

@@ -24,6 +24,8 @@ export const ATTACHMENT_TAG_NODE = 'attachmentTag';
 export interface AttachmentTagAttrs {
     /** 附件唯一标识，关联外层附件数据 */
     attachmentId: string;
+    /** 当前输入内提供给模型使用的顺序别名。 */
+    alias: string;
     /** 文件名，用于显示和提示 */
     fileName: string;
     /** 文件类型：image 显示缩略图，file 显示文件名 */
@@ -41,6 +43,7 @@ const AttachmentTagNode = createSearchTagNode({
     addAttributes() {
         return {
             attachmentId: { default: null },
+            alias: { default: null },
             fileName: { default: null },
             fileType: { default: 'file' },
             preview: { default: null },
@@ -52,9 +55,11 @@ const AttachmentTagNode = createSearchTagNode({
     getRootAttributes(HTMLAttributes) {
         const isImage = HTMLAttributes.fileType === 'image';
         const name = HTMLAttributes.fileName || 'file';
+        const alias = HTMLAttributes.alias || '';
         return {
             'data-attachment-tag': '',
             'data-attachment-id': HTMLAttributes.attachmentId || '',
+            'data-attachment-alias': alias,
             class: isImage ? 'search-tag-chip--image' : '',
             title: name,
         };
@@ -142,6 +147,7 @@ export function getAttachmentTags(editor: Editor): AttachmentTagAttrs[] {
 
         tags.push({
             attachmentId: node.attrs.attachmentId,
+            alias: node.attrs.alias,
             fileName: node.attrs.fileName,
             fileType: node.attrs.fileType,
             preview: node.attrs.preview ?? undefined,

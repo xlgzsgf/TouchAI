@@ -2,6 +2,7 @@
 
 import type { AttachmentIndex } from '@/services/AgentService/infrastructure/attachments';
 
+import type { AttachmentTransportMode } from '../contracts/protocol';
 import type { TaskExecutionMode } from '../task/types';
 
 /**
@@ -34,10 +35,13 @@ export interface PromptFragment {
  */
 export interface PromptSnapshotAttachmentSummary {
     id: string;
+    alias: string;
     name: string;
     type: AttachmentIndex['type'];
     size: number | null;
     mimeType: string | null;
+    originPath: string;
+    transportMode: AttachmentTransportMode;
     supportStatus: AttachmentIndex['supportStatus'] | null;
 }
 

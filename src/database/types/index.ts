@@ -99,6 +99,7 @@ export interface AttachmentEntity {
     hash: string;
     type: 'image' | 'file';
     original_name: string;
+    origin_path: string;
     mime_type: string | null;
     size: number | null;
     created_at: string;
@@ -108,6 +109,7 @@ export interface AttachmentCreateData {
     hash: string;
     type: 'image' | 'file';
     original_name: string;
+    origin_path: string;
     mime_type?: string | null;
     size?: number | null;
     created_at?: string;
@@ -118,6 +120,7 @@ export interface MessageAttachmentEntity {
     message_id: number;
     attachment_id: number;
     sort_order: number;
+    origin_path: string;
     created_at: string;
 }
 
@@ -125,6 +128,7 @@ export interface MessageAttachmentCreateData {
     message_id: number;
     attachment_id: number;
     sort_order?: number;
+    origin_path: string;
     created_at?: string;
 }
 

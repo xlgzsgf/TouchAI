@@ -2,7 +2,15 @@
  * Copyright (c) 2026. Qian Cheng. Licensed under GPL v3
  */
 
-export { buildAttachmentParts, readAttachmentAsBase64, readAttachmentAsText } from './content';
+export {
+    buildAttachmentAlias,
+    buildAttachmentParts,
+    buildAttachmentPromptMetas,
+    formatAttachmentAnchorText,
+    readAttachmentAsBase64,
+    readAttachmentAsText,
+    resolveAttachmentTransportMode,
+} from './content';
 export {
     createAttachment,
     ensurePersistedAttachmentIndex,

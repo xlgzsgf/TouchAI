@@ -1,6 +1,10 @@
 // Copyright (c) 2026. Qian Cheng. Licensed under GPL v3
 
-import type { AttachmentIndex } from '@/services/AgentService/infrastructure/attachments';
+import {
+    type AttachmentIndex,
+    buildAttachmentPromptMetas,
+    resolveAttachmentTransportMode,
+} from '@/services/AgentService/infrastructure/attachments';
 
 import type { TaskExecutionMode } from '../task/types';
 import type { PromptAssembly, PromptFragment, PromptFragmentSource, PromptSnapshot } from './types';
@@ -53,18 +57,38 @@ function buildFragments(source: PromptFragmentSource, contents: string[]): Promp
         }));
 }
 
-function summarizeAttachments(attachments: AttachmentIndex[]): PromptAssembly['attachments'] {
-    return attachments.map((attachment) => ({
-        id: attachment.id,
-        name: attachment.name,
-        type: attachment.type,
-        size: attachment.size ?? null,
-        mimeType: attachment.mimeType ?? null,
-        supportStatus: attachment.supportStatus ?? null,
-    }));
+async function summarizeAttachments(
+    attachments: AttachmentIndex[]
+): Promise<PromptAssembly['attachments']> {
+    const metas = buildAttachmentPromptMetas(attachments);
+
+    return Promise.all(
+        attachments.map(async (attachment, index) => {
+            let transportMode: PromptAssembly['attachments'][number]['transportMode'] =
+                attachment.type === 'image' ? 'inline-image' : 'inline-text';
+
+            try {
+                transportMode = await resolveAttachmentTransportMode(attachment);
+            } catch (error) {
+                console.error('[PromptComposer] Failed to inspect attachment transport:', error);
+            }
+
+            return {
+                id: attachment.id,
+                alias: metas[index]!.alias,
+                name: attachment.name,
+                type: attachment.type,
+                size: attachment.size ?? null,
+                mimeType: attachment.mimeType ?? null,
+                originPath: attachment.originPath,
+                transportMode,
+                supportStatus: attachment.supportStatus ?? null,
+            };
+        })
+    );
 }
 
-function buildPromptAssembly(options: ComposePromptSnapshotOptions): PromptAssembly {
+async function buildPromptAssembly(options: ComposePromptSnapshotOptions): Promise<PromptAssembly> {
     const executionMode = options.executionMode ?? 'foreground';
     const fragmentsBySource: Record<PromptFragmentSource, PromptFragment[]> = {
         override: buildFragments('override', options.override ?? []),
@@ -84,15 +108,17 @@ function buildPromptAssembly(options: ComposePromptSnapshotOptions): PromptAssem
         executionMode,
         fragments: PROMPT_SOURCE_ORDER.flatMap((source) => fragmentsBySource[source]),
         userPrompt: options.prompt,
-        attachments: summarizeAttachments(options.attachments ?? []),
+        attachments: await summarizeAttachments(options.attachments ?? []),
     };
 }
 
 /**
  * 统一装配并冻结当前 turn 的 prompt 快照。
  */
-export function composePromptSnapshot(options: ComposePromptSnapshotOptions): PromptSnapshot {
-    const assembly = buildPromptAssembly(options);
+export async function composePromptSnapshot(
+    options: ComposePromptSnapshotOptions
+): Promise<PromptSnapshot> {
+    const assembly = await buildPromptAssembly(options);
 
     return {
         id: crypto.randomUUID(),

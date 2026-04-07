@@ -164,12 +164,13 @@ INNER JOIN temp_ranked_target_messages AS target_messages
    AND target_messages.occurrence_index = source_messages.occurrence_index;
 
 INSERT INTO main.attachments (
-    hash, type, original_name, mime_type, size, created_at
+    hash, type, original_name, origin_path, mime_type, size, created_at
 )
 SELECT
     source_attachments.hash,
     source_attachments.type,
     source_attachments.original_name,
+    source_attachments.origin_path,
     source_attachments.mime_type,
     source_attachments.size,
     source_attachments.created_at
@@ -181,12 +182,13 @@ WHERE NOT EXISTS (
 );
 
 INSERT INTO main.message_attachments (
-    message_id, attachment_id, sort_order, created_at
+    message_id, attachment_id, sort_order, origin_path, created_at
 )
 SELECT
     message_map.target_message_id,
     target_attachments.id,
     source_message_attachments.sort_order,
+    source_message_attachments.origin_path,
     source_message_attachments.created_at
 FROM imported.message_attachments AS source_message_attachments
 INNER JOIN temp_message_map AS message_map

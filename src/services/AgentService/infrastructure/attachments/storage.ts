@@ -113,6 +113,7 @@ async function buildAttachmentStoragePath(
 async function ensureAttachmentRecord(
     type: AttachmentIndex['type'],
     path: string,
+    originPath: string,
     database: DatabaseExecutor = db
 ): Promise<AttachmentEntity> {
     const [hash, name, mimeType, size] = await Promise.all([
@@ -136,6 +137,7 @@ async function ensureAttachmentRecord(
                 hash,
                 type,
                 original_name: name,
+                origin_path: originPath,
                 mime_type: mimeType ?? null,
                 size,
             },
@@ -159,6 +161,7 @@ async function toAttachmentIndex(attachment: AttachmentEntity): Promise<Attachme
         hash: attachment.hash,
         type: attachment.type,
         path: storagePath,
+        originPath: attachment.origin_path,
         name: attachment.original_name,
         size: attachment.size ?? undefined,
         preview: await buildPreview(attachment.type, storagePath),
@@ -192,6 +195,7 @@ export async function createAttachment(
         id: crypto.randomUUID(),
         type,
         path,
+        originPath: path,
         name,
         size,
         preview,
@@ -216,6 +220,7 @@ export async function hydratePersistedAttachments(
                 hash: attachment.hash,
                 type: attachment.type,
                 original_name: attachment.original_name,
+                origin_path: attachment.origin_path,
                 mime_type: attachment.mime_type,
                 size: attachment.size,
                 created_at: attachment.created_at,
@@ -244,13 +249,19 @@ export async function ensurePersistedAttachmentIndex(
             hash: attachment.hash,
             type: attachment.type,
             original_name: attachment.name,
+            origin_path: attachment.originPath,
             mime_type: attachment.mimeType ?? null,
             size: attachment.size ?? null,
             created_at: new Date().toISOString(),
         };
     }
 
-    const persisted = await ensureAttachmentRecord(attachment.type, attachment.path, database);
+    const persisted = await ensureAttachmentRecord(
+        attachment.type,
+        attachment.path,
+        attachment.originPath,
+        database
+    );
     attachment.attachmentId = persisted.id;
     attachment.hash = persisted.hash;
     attachment.path = await buildAttachmentStoragePath(persisted.type, persisted.hash);

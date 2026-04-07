@@ -189,11 +189,11 @@ export class AiConversationRuntime {
         // 后续 retry、tool iteration、checkpoint resume 都必须复用它。
         const promptSnapshot =
             this.options.promptSnapshot ??
-            composePromptSnapshot({
+            (await composePromptSnapshot({
                 prompt: this.options.prompt,
                 attachments: this.options.attachments,
                 executionMode: this.options.executionMode ?? 'foreground',
-            });
+            }));
         const baseMessages = await buildPromptTransportMessages({
             sessionId: this.options.sessionId,
             snapshot: promptSnapshot,

@@ -579,11 +579,14 @@ export class PersistenceProjector {
             );
 
             for (const [index, entity] of persisted.entries()) {
+                const source = attachments[index]!;
+                const originPath = 'originPath' in source ? source.originPath : source.origin_path;
                 await createMessageAttachment(
                     {
                         message_id: message.id,
                         attachment_id: entity.id,
                         sort_order: index,
+                        origin_path: originPath,
                     },
                     database
                 );

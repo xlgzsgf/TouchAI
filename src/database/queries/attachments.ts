@@ -79,6 +79,7 @@ export async function findAttachmentsByMessageIds(
             hash: attachments.hash,
             type: attachments.type,
             original_name: attachments.original_name,
+            origin_path: messageAttachments.origin_path,
             mime_type: attachments.mime_type,
             size: attachments.size,
             created_at: attachments.created_at,

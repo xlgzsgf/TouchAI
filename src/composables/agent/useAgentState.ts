@@ -8,6 +8,7 @@ import type { SessionMessage } from '@/types/session';
 export interface UseAgentStateOptions {
     onChunk?: (content: string) => void;
     onModelSelected?: (target: { modelId: string; providerId: number }) => void;
+    onTurnStarted?: (target: { sessionId: number; turnId: number }) => void;
 }
 
 interface DetachTaskViewOptions {
@@ -66,6 +67,7 @@ export function useAgentState(options: UseAgentStateOptions = {}) {
 
     let unsubscribeTask: (() => void) | null = null;
     let lastObservedModelSwitchCount = 0;
+    let lastObservedTurnId: number | null = null;
     let lastDeliveredResponse = '';
 
     function clearObservedTaskState() {
@@ -75,6 +77,7 @@ export function useAgentState(options: UseAgentStateOptions = {}) {
         pendingToolApproval.value = null;
         pendingApprovalQueue.value = [];
         lastObservedModelSwitchCount = 0;
+        lastObservedTurnId = null;
         isLoading.value = false;
     }
 
@@ -126,7 +129,19 @@ export function useAgentState(options: UseAgentStateOptions = {}) {
             });
         }
 
+        if (
+            snapshot.turnId !== null &&
+            snapshot.sessionId !== null &&
+            snapshot.turnId !== lastObservedTurnId
+        ) {
+            options.onTurnStarted?.({
+                sessionId: snapshot.sessionId,
+                turnId: snapshot.turnId,
+            });
+        }
+
         lastObservedModelSwitchCount = snapshot.modelSwitchCount;
+        lastObservedTurnId = snapshot.turnId;
     }
 
     /**

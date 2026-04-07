@@ -4,7 +4,11 @@
 
 import { convertFileSrc } from '@tauri-apps/api/core';
 
-import type { AiContentPart } from '../../contracts/protocol';
+import type {
+    AiContentPart,
+    AttachmentPromptMeta,
+    AttachmentTransportMode,
+} from '../../contracts/protocol';
 import { isAttachmentSupported } from './support';
 import type { AttachmentIndex } from './types';
 
@@ -68,6 +72,44 @@ export async function readAttachmentAsText(
     return { content: text, isBinary: false };
 }
 
+export function buildAttachmentAlias(order: number): string {
+    return `A${order + 1}`;
+}
+
+export function buildAttachmentPromptMetas(attachments: AttachmentIndex[]): AttachmentPromptMeta[] {
+    return attachments.map((attachment, order) => ({
+        alias: buildAttachmentAlias(order),
+        order,
+        type: attachment.type,
+        name: attachment.name,
+        mimeType: attachment.mimeType ?? null,
+        originPath: attachment.originPath,
+        attachmentId: attachment.attachmentId ?? null,
+        hash: attachment.hash ?? null,
+    }));
+}
+
+export function formatAttachmentAnchorText(meta: AttachmentPromptMeta): string {
+    return [
+        `[Attachment ${meta.alias}]`,
+        `name: ${meta.name}`,
+        `type: ${meta.type}`,
+        `origin_path: ${meta.originPath}`,
+        `mime_type: ${meta.mimeType ?? 'unknown'}`,
+    ].join('\n');
+}
+
+export async function resolveAttachmentTransportMode(
+    attachment: AttachmentIndex
+): Promise<AttachmentTransportMode> {
+    if (attachment.type === 'image') {
+        return 'inline-image';
+    }
+
+    const { isBinary } = await readAttachmentAsText(attachment);
+    return isBinary ? 'inline-base64' : 'inline-text';
+}
+
 /**
  * 将附件转换为可送入模型的统一内容片段。
  */
@@ -77,22 +119,31 @@ export async function buildAttachmentParts(
     const parts: AiContentPart[] = [];
     // 同一会话内模型可能切换，这里静默跳过当前模型不支持的附件，避免整轮失败。
     const usableAttachments = attachments.filter((attachment) => isAttachmentSupported(attachment));
+    const metas = buildAttachmentPromptMetas(usableAttachments);
 
-    for (const attachment of usableAttachments) {
+    for (const [index, attachment] of usableAttachments.entries()) {
+        const meta = metas[index]!;
         try {
             if (attachment.type === 'image') {
                 const { data, mimeType } = await readAttachmentAsBase64(attachment);
-                parts.push({ type: 'image', mimeType, data });
+                parts.push(
+                    { type: 'text', text: formatAttachmentAnchorText(meta) },
+                    { type: 'image', mimeType, data, meta }
+                );
                 continue;
             }
 
             const { content, isBinary } = await readAttachmentAsText(attachment);
-            parts.push({
-                type: 'file',
-                name: attachment.name,
-                content,
-                isBinary,
-            });
+            parts.push(
+                { type: 'text', text: formatAttachmentAnchorText(meta) },
+                {
+                    type: 'file',
+                    name: attachment.name,
+                    content,
+                    isBinary,
+                    meta,
+                }
+            );
         } catch (error) {
             console.error('[AttachmentContent] Failed to read attachment:', error);
         }

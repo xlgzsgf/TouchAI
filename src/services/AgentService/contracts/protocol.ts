@@ -2,13 +2,26 @@
 
 import type { AiToolCall, AiToolCallDelta, AiToolDefinition, ToolEvent } from './tooling';
 
+export type AttachmentTransportMode = 'inline-image' | 'inline-text' | 'inline-base64';
+
+export interface AttachmentPromptMeta {
+    alias: string;
+    order: number;
+    type: 'image' | 'file';
+    name: string;
+    mimeType: string | null;
+    originPath: string;
+    attachmentId: number | null;
+    hash: string | null;
+}
+
 /**
  * 单条消息内容在应用内部的统一片段表示。
  */
 export type AiContentPart =
     | { type: 'text'; text: string }
-    | { type: 'image'; mimeType: string; data: string }
-    | { type: 'file'; name: string; content: string; isBinary: boolean }
+    | { type: 'image'; mimeType: string; data: string; meta: AttachmentPromptMeta }
+    | { type: 'file'; name: string; content: string; isBinary: boolean; meta: AttachmentPromptMeta }
     | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
     | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean };
 

@@ -10,6 +10,7 @@ export interface AttachmentIndex {
     hash?: string;
     type: 'image' | 'file';
     path: string;
+    originPath: string;
     name: string;
     size?: number;
     preview?: string;
