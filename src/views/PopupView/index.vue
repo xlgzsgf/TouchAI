@@ -84,6 +84,7 @@
         unlisteners.push(
             await eventService.on(AppEvent.POPUP_DATA, async (payload: PopupDataPayload) => {
                 if (payload.windowLabel !== currentLabel) return;
+
                 popupId.value = payload.popupId;
                 popupType.value = payload.type;
                 popupData.value = payload.data;

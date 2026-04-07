@@ -1,11 +1,17 @@
 ﻿<script setup lang="ts">
     // Copyright (c) 2026. Qian Cheng. Licensed under GPL v3.
 
-    import { popupManager as popupService, type SessionHistoryData } from '@services/PopupService';
+    import { useSessionStatus } from '@composables/useSessionStatus';
+    import {
+        popupManager as popupService,
+        type SessionHistoryData,
+        type SessionHistorySessionItem,
+    } from '@services/PopupService';
     import { sendNotification } from '@tauri-apps/plugin-notification';
     import { nextTick, onMounted, onUnmounted, reactive, ref, toRef, watch } from 'vue';
 
     import { mcpManager } from '@/services/AgentService/infrastructure/mcp';
+    import type { SessionTaskStatus } from '@/services/AgentService/task/types';
     import { useMcpStore } from '@/stores/mcp';
     import { useSettingsStore } from '@/stores/settings';
 
@@ -72,6 +78,7 @@
     const isDragging = ref(false);
     const mcpStore = useMcpStore();
     const settingsStore = useSettingsStore();
+    const { sessionStatuses, refreshAllStatuses: refreshSessionStatuses } = useSessionStatus();
     const widgetBridgeWindow = window as Window & {
         sendPrompt?: (text: string) => void;
         openLink?: (url: string) => void;
@@ -170,6 +177,29 @@
         clearSession,
     });
 
+    function isDisplayableSessionStatus(
+        status: SessionTaskStatus | null | undefined
+    ): status is SessionHistorySessionItem['displayStatus'] {
+        return (
+            status === 'running' ||
+            status === 'waiting_approval' ||
+            status === 'completed' ||
+            status === 'failed'
+        );
+    }
+
+    function resolveSessionDisplayStatus(
+        sessionId: number,
+        pendingTerminalStatus: SessionHistorySessionItem['pending_terminal_status']
+    ): SessionHistorySessionItem['displayStatus'] {
+        const runtimeStatus = sessionStatuses.value.get(sessionId) ?? null;
+        if (isDisplayableSessionStatus(runtimeStatus)) {
+            return runtimeStatus;
+        }
+
+        return pendingTerminalStatus ?? null;
+    }
+
     const {
         openModelDropdownWithLayoutSync,
         closeModelDropdown,
@@ -190,7 +220,13 @@
 
     function getSessionHistoryPopupData(): SessionHistoryData {
         return {
-            sessions: sessionList.value,
+            sessions: sessionList.value.map<SessionHistorySessionItem>((session) => ({
+                ...session,
+                displayStatus: resolveSessionDisplayStatus(
+                    session.id,
+                    session.pending_terminal_status
+                ),
+            })),
             activeSessionId: currentSessionId.value,
             searchQuery: sessionListQuery.value,
             isLoading: isSessionListLoading.value,
@@ -522,12 +558,21 @@
     );
 
     watch(
+        sessionList,
+        (sessions) => {
+            refreshSessionStatuses(sessions.map((session) => session.id));
+        },
+        { immediate: true }
+    );
+
+    watch(
         [
             sessionHistoryPopupOpen,
             sessionList,
             sessionListQuery,
             isSessionListLoading,
             currentSessionId,
+            sessionStatuses,
         ],
         ([isOpen]) => {
             if (!isOpen) {

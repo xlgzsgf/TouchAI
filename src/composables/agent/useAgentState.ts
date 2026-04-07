@@ -10,6 +10,10 @@ export interface UseAgentStateOptions {
     onModelSelected?: (target: { modelId: string; providerId: number }) => void;
 }
 
+interface DetachTaskViewOptions {
+    preserveSession?: boolean;
+}
+
 /**
  * 提取最近一条有效 assistant 输出。
  */
@@ -64,6 +68,23 @@ export function useAgentState(options: UseAgentStateOptions = {}) {
     let lastObservedModelSwitchCount = 0;
     let lastDeliveredResponse = '';
 
+    function clearObservedTaskState() {
+        attachedTaskId.value = null;
+        taskStatus.value = null;
+        currentModel.value = null;
+        pendingToolApproval.value = null;
+        pendingApprovalQueue.value = [];
+        lastObservedModelSwitchCount = 0;
+        isLoading.value = false;
+    }
+
+    function clearTransientBuffers() {
+        response.value = '';
+        reasoning.value = '';
+        error.value = null;
+        lastDeliveredResponse = '';
+    }
+
     /**
      * 将任务快照同步到页面状态。
      */
@@ -111,22 +132,18 @@ export function useAgentState(options: UseAgentStateOptions = {}) {
     /**
      * 解除当前任务订阅并清空本地状态。
      */
-    function detachTaskView() {
+    function detachTaskView(options: DetachTaskViewOptions = {}) {
         unsubscribeTask?.();
         unsubscribeTask = null;
-        attachedTaskId.value = null;
+        clearObservedTaskState();
+        clearTransientBuffers();
+
+        if (options.preserveSession) {
+            return;
+        }
+
         currentSessionId.value = null;
         sessionHistory.value = [];
-        taskStatus.value = null;
-        currentModel.value = null;
-        pendingToolApproval.value = null;
-        pendingApprovalQueue.value = [];
-        response.value = '';
-        reasoning.value = '';
-        error.value = null;
-        lastObservedModelSwitchCount = 0;
-        lastDeliveredResponse = '';
-        isLoading.value = false;
     }
 
     /**
@@ -155,10 +172,7 @@ export function useAgentState(options: UseAgentStateOptions = {}) {
      * 重置页面瞬时缓冲，但保留任务挂接关系。
      */
     function resetTaskViewState() {
-        response.value = '';
-        reasoning.value = '';
-        error.value = null;
-        lastDeliveredResponse = '';
+        clearTransientBuffers();
     }
 
     onUnmounted(() => {

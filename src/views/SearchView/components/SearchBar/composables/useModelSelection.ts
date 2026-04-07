@@ -1,7 +1,7 @@
 import { findModelsWithProvider } from '@database/queries';
 import type { ModelWithProvider } from '@database/queries/models';
 import type { Editor } from '@tiptap/core';
-import { computed, onMounted, type Ref, ref, type ShallowRef } from 'vue';
+import { computed, onMounted, type Ref, ref, type ShallowRef, watch } from 'vue';
 
 import { aiService } from '@/services/AgentService';
 import { parseModelModalities } from '@/utils/modelSchemas';
@@ -25,12 +25,26 @@ interface UseModelSelectionOptions {
 export interface UseModelSelectionDeps {
     findModels: () => Promise<ModelWithProvider[]>;
     getActiveModel: () => Promise<ModelWithProvider | null>;
+    findModelByOverride: (override: SearchModelOverride) => Promise<ModelWithProvider | null>;
     createSearchSession: typeof useModelSearchSession;
 }
 
 const DEFAULT_DEPS: UseModelSelectionDeps = {
     findModels: () => findModelsWithProvider(),
     getActiveModel: () => aiService.getModel(),
+    findModelByOverride: async (override) => {
+        if (!override.modelId || override.providerId === null) {
+            return null;
+        }
+
+        return (
+            (
+                await findModelsWithProvider({
+                    providerId: override.providerId,
+                })
+            ).find((model) => model.model_id === override.modelId) ?? null
+        );
+    },
     createSearchSession: useModelSearchSession,
 };
 
@@ -53,25 +67,38 @@ export function useModelSelection(
     });
 
     const activeModel = ref<ModelWithProvider | null>(null);
+    const resolvedOverrideModel = ref<ModelWithProvider | null>(null);
     // 缓存原始模型列表，供 handleModelSelect 使用，避免重复查询数据库。
     const availableModels = ref<ModelWithProvider[]>([]);
     let hasLoadedPopupModels = false;
     let popupModelsLoadPromise: Promise<ModelWithProvider[]> | null = null;
+    let resolveOverrideRequestId = 0;
     const selectedModel = computed(() => {
         const { modelId, providerId } = modelOverride.value;
         if (!modelId) {
             return null;
         }
 
-        return (
+        const matchedAvailableModel =
             availableModels.value.find(
                 (model) => model.model_id === modelId && model.provider_id === providerId
-            ) ??
-            (activeModel.value?.model_id === modelId &&
-            activeModel.value?.provider_id === providerId
+            ) ?? null;
+        if (matchedAvailableModel) {
+            return matchedAvailableModel;
+        }
+
+        const matchedActiveModel =
+            activeModel.value?.model_id === modelId && activeModel.value?.provider_id === providerId
                 ? activeModel.value
-                : null)
-        );
+                : null;
+        if (matchedActiveModel) {
+            return matchedActiveModel;
+        }
+
+        return resolvedOverrideModel.value?.model_id === modelId &&
+            resolvedOverrideModel.value?.provider_id === providerId
+            ? resolvedOverrideModel.value
+            : null;
     });
     const selectedModelId = computed(() => modelOverride.value.modelId);
     const selectedModelName = computed(() => selectedModel.value?.name ?? null);
@@ -89,6 +116,53 @@ export function useModelSelection(
         } catch (error) {
             console.error('[SearchBar] Failed to load active model:', error);
             activeModel.value = null;
+        }
+    }
+
+    /**
+     * 会话切换时页面会直接写入受控 modelOverride，但此时 dropdown 候选模型通常还没加载。
+     * 这里按 override 精确解析一次模型，保证历史会话切回来也能立即显示正确模型标签。
+     */
+    async function resolveControlledOverrideModel() {
+        const override = modelOverride.value;
+        if (!override.modelId || override.providerId === null) {
+            resolvedOverrideModel.value = null;
+            return;
+        }
+
+        const matchedAvailableModel =
+            availableModels.value.find(
+                (model) =>
+                    model.model_id === override.modelId && model.provider_id === override.providerId
+            ) ?? null;
+        if (matchedAvailableModel) {
+            resolvedOverrideModel.value = matchedAvailableModel;
+            return;
+        }
+
+        if (
+            activeModel.value?.model_id === override.modelId &&
+            activeModel.value?.provider_id === override.providerId
+        ) {
+            resolvedOverrideModel.value = activeModel.value;
+            return;
+        }
+
+        const requestId = ++resolveOverrideRequestId;
+        try {
+            const resolvedModel = await deps.findModelByOverride(override);
+            if (requestId !== resolveOverrideRequestId) {
+                return;
+            }
+
+            resolvedOverrideModel.value = resolvedModel;
+        } catch (error) {
+            if (requestId !== resolveOverrideRequestId) {
+                return;
+            }
+
+            console.error('[SearchBar] Failed to resolve controlled override model:', error);
+            resolvedOverrideModel.value = null;
         }
     }
 
@@ -252,6 +326,20 @@ export function useModelSelection(
     onMounted(async () => {
         await loadActiveModel();
     });
+
+    watch(
+        () => [
+            modelOverride.value.modelId,
+            modelOverride.value.providerId,
+            activeModel.value?.model_id ?? null,
+            activeModel.value?.provider_id ?? null,
+            availableModels.value.length,
+        ],
+        () => {
+            void resolveControlledOverrideModel();
+        },
+        { immediate: true }
+    );
 
     return {
         currentPlaceholder: searchSession.currentPlaceholder,

@@ -167,18 +167,12 @@ export function useAgent(options: UseAiRequestOptions = {}) {
             };
         }
 
-        // 先加载新会话，再清理旧任务，避免 UI 看到空的 sessionHistory
-        const result = await loadPersistedSession(sessionId);
-
-        // loadPersistedSession 已经设置了新的 sessionHistory 和 currentSessionId
-        // 现在只需要清理旧任务的订阅，但不要再清空 sessionHistory
         if (attachedTaskId.value !== null) {
-            // 手动清理任务订阅，不调用 detachTaskView（它会清空 sessionHistory）
-            attachedTaskId.value = null;
-            resetTaskViewState();
+            // 切到静态会话前先真正解开旧任务订阅，避免旧会话的后续流式更新把页面抢回去。
+            detachTaskView({ preserveSession: true });
         }
 
-        return result;
+        return loadPersistedSession(sessionId);
     }
 
     /**

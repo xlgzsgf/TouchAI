@@ -96,19 +96,20 @@
                                             {{ segment.text }}
                                         </span>
                                     </p>
-                                    <div v-if="getSessionStatus(session.id)" class="shrink-0">
-                                        <div
-                                            v-if="getSessionStatus(session.id) === 'running'"
-                                            title="运行中"
-                                            class="border-primary-500 h-3 w-3 animate-spin rounded-full border-2 border-t-transparent"
-                                        ></div>
-                                        <div
-                                            v-else-if="
-                                                getSessionStatus(session.id) === 'waiting_approval'
-                                            "
-                                            title="等待审批"
-                                            class="h-2 w-2 rounded-full bg-blue-500"
-                                        ></div>
+                                    <div
+                                        v-if="getSessionStatusMeta(session)"
+                                        class="history-session-status-indicator shrink-0"
+                                        :title="getSessionStatusMeta(session)?.title"
+                                    >
+                                        <span
+                                            v-if="getSessionStatusMeta(session)?.showSpinner"
+                                            class="history-session-status-spinner"
+                                        ></span>
+                                        <span
+                                            v-else
+                                            class="history-session-status-dot"
+                                            :class="getSessionStatusMeta(session)?.className"
+                                        ></span>
                                     </div>
                                 </div>
 
@@ -152,13 +153,10 @@
 
 <script setup lang="ts">
     import AppIcon from '@components/AppIcon.vue';
-    import type { SessionEntity } from '@database/types';
     import { AppEvent, eventService } from '@services/EventService';
-    import type { SessionHistoryData } from '@services/PopupService';
+    import type { SessionHistoryData, SessionHistorySessionItem } from '@services/PopupService';
     import type { ComponentPublicInstance } from 'vue';
     import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
-
-    import { useSessionStatus } from '@/composables/useSessionStatus';
 
     defineOptions({
         name: 'SessionHistoryPopover',
@@ -171,12 +169,23 @@
 
     interface SessionGroup {
         label: string;
-        sessions: SessionEntity[];
+        sessions: SessionHistorySessionItem[];
     }
 
     interface HighlightSegment {
         text: string;
         matched: boolean;
+    }
+
+    interface SessionStatusMeta {
+        title: string;
+        className: string;
+        showSpinner?: boolean;
+    }
+
+    interface ScrollAnchor {
+        sessionId: number;
+        offset: number;
     }
 
     const props = withDefaults(defineProps<Props>(), {
@@ -194,11 +203,29 @@
     const sessionRowRefs = ref<Record<number, HTMLElement | null>>({});
     const scrollRequestId = ref(0);
 
-    const sessions = computed<SessionEntity[]>(() => props.data?.sessions ?? []);
+    const sessions = computed<SessionHistorySessionItem[]>(() => props.data?.sessions ?? []);
     const activeSessionId = computed(() => props.data?.activeSessionId ?? null);
     const searchQuery = computed(() => props.data?.searchQuery ?? '');
     const isLoading = computed(() => props.data?.isLoading ?? false);
-    const { getSessionStatus, refreshAllStatuses } = useSessionStatus();
+    const sessionStatusMetaMap: Record<string, SessionStatusMeta> = {
+        running: {
+            title: '会话正在生成内容',
+            showSpinner: true,
+            className: '',
+        },
+        waiting_approval: {
+            title: '会话正在等待工具批准',
+            className: 'history-session-status-dot--waiting',
+        },
+        completed: {
+            title: '会话已完成，点击后会隐藏该状态',
+            className: 'history-session-status-dot--completed',
+        },
+        failed: {
+            title: '会话执行失败，点击后会隐藏该状态',
+            className: 'history-session-status-dot--failed',
+        },
+    };
 
     // 列表由页面层查询，这里只用已提交的 query 做高亮。
     const searchTokens = computed(() => {
@@ -243,9 +270,20 @@
     }
 
     const orderedSessions = computed(() => sessions.value);
+    const orderedSessionIdsSignature = computed(() =>
+        orderedSessions.value.map((session) => session.id).join(',')
+    );
+    const sessionRenderSignature = computed(() =>
+        orderedSessions.value
+            .map(
+                (session) =>
+                    `${session.id}:${session.displayStatus ?? ''}:${session.last_message_at ?? ''}:${session.updated_at}`
+            )
+            .join('|')
+    );
 
     const groupedSessions = computed<SessionGroup[]>(() => {
-        const groups = new Map<string, SessionEntity[]>();
+        const groups = new Map<string, SessionHistorySessionItem[]>();
 
         for (const session of orderedSessions.value) {
             const groupLabel = getSessionGroupLabel(session.last_message_at || session.updated_at);
@@ -286,6 +324,15 @@
         void eventService.emit(AppEvent.POPUP_SESSION_SEARCH_QUERY_CHANGE, {
             query: target.value,
         });
+    }
+
+    function getSessionStatusMeta(session: SessionHistorySessionItem): SessionStatusMeta | null {
+        const status = session.displayStatus;
+        if (!status) {
+            return null;
+        }
+
+        return sessionStatusMetaMap[status] ?? null;
     }
 
     async function handleOpenSession(sessionId: number) {
@@ -364,11 +411,11 @@
         return segments.filter((segment) => segment.text.length > 0);
     }
 
-    function getSessionTitleSegments(session: SessionEntity): HighlightSegment[] {
+    function getSessionTitleSegments(session: SessionHistorySessionItem): HighlightSegment[] {
         return getHighlightedSegments(session.title || '未命名会话');
     }
 
-    function getSessionPreviewSegments(session: SessionEntity): HighlightSegment[] {
+    function getSessionPreviewSegments(session: SessionHistorySessionItem): HighlightSegment[] {
         return getHighlightedSegments(session.last_message_preview ?? '');
     }
 
@@ -409,6 +456,75 @@
         const groupSection = rowElement.closest('section');
 
         return isFirstRowInGroup && groupSection instanceof HTMLElement ? groupSection : rowElement;
+    }
+
+    function captureScrollAnchor(): ScrollAnchor | null {
+        const listElement = historyListRef.value;
+        if (!listElement || orderedSessions.value.length === 0) {
+            return null;
+        }
+
+        const listRect = listElement.getBoundingClientRect();
+        const viewportTop = listRect.top;
+
+        for (const session of orderedSessions.value) {
+            const rowElement = sessionRowRefs.value[session.id];
+            if (!rowElement) {
+                continue;
+            }
+
+            const targetElement = resolveTopScrollTarget(rowElement);
+            const targetRect = targetElement.getBoundingClientRect();
+            if (targetRect.bottom <= viewportTop) {
+                continue;
+            }
+
+            return {
+                sessionId: session.id,
+                offset: targetRect.top - viewportTop,
+            };
+        }
+
+        const fallbackSessionId = orderedSessions.value[0]?.id ?? null;
+        if (fallbackSessionId === null) {
+            return null;
+        }
+
+        return {
+            sessionId: fallbackSessionId,
+            offset: 0,
+        };
+    }
+
+    async function restoreScrollAnchor(anchor: ScrollAnchor): Promise<void> {
+        const requestId = ++scrollRequestId.value;
+        await nextTick();
+
+        if (requestId !== scrollRequestId.value) {
+            return;
+        }
+
+        await new Promise<void>((resolve) => {
+            requestAnimationFrame(() => {
+                if (requestId !== scrollRequestId.value) {
+                    resolve();
+                    return;
+                }
+
+                const listElement = historyListRef.value;
+                const rowElement = sessionRowRefs.value[anchor.sessionId];
+                if (!listElement || !rowElement) {
+                    resolve();
+                    return;
+                }
+
+                const targetElement = resolveTopScrollTarget(rowElement);
+                const listRect = listElement.getBoundingClientRect();
+                const targetRect = targetElement.getBoundingClientRect();
+                listElement.scrollTop += targetRect.top - listRect.top - anchor.offset;
+                resolve();
+            });
+        });
     }
 
     async function scrollToSession(sessionId: number | null, align: 'nearest' | 'top' = 'nearest') {
@@ -571,18 +687,6 @@
         });
     }
 
-    function loadSessions(loadedSessions: SessionEntity[]) {
-        refreshAllStatuses(loadedSessions.map((session) => session.id));
-    }
-
-    watch(
-        sessions,
-        (loadedSessions) => {
-            loadSessions(loadedSessions);
-        },
-        { immediate: true }
-    );
-
     watch(
         () => searchQuery.value,
         (value) => {
@@ -592,6 +696,42 @@
 
             localSearchQuery.value = value;
         }
+    );
+
+    watch(
+        () =>
+            [
+                sessionRenderSignature.value,
+                searchQuery.value,
+                activeSessionId.value,
+                isLoading.value,
+            ] as const,
+        async ([renderSignature, query, activeSessionId, loading], previousValue) => {
+            if (!previousValue) {
+                return;
+            }
+
+            const previousRenderSignature = previousValue[0];
+            const previousQuery = previousValue[1];
+            const previousActiveSessionId = previousValue[2];
+            const previousLoading = previousValue[3];
+
+            if (
+                (renderSignature === previousRenderSignature && loading === previousLoading) ||
+                query !== previousQuery ||
+                activeSessionId !== previousActiveSessionId
+            ) {
+                return;
+            }
+
+            const anchor = captureScrollAnchor();
+            if (!anchor) {
+                return;
+            }
+
+            await restoreScrollAnchor(anchor);
+        },
+        { flush: 'pre' }
     );
 
     watch(
@@ -610,9 +750,20 @@
     );
 
     watch(
-        () => [orderedSessions.value, activeSessionId.value] as const,
-        ([, activeSessionId], previousValue) => {
+        () => [orderedSessionIdsSignature.value, activeSessionId.value] as const,
+        ([sessionIdsSignature, activeSessionId], previousValue) => {
+            const previousSessionIdsSignature = previousValue?.[0] ?? '';
             const previousActiveSessionId = previousValue?.[1] ?? null;
+
+            // 纯状态刷新会跨窗口重建 props 对象，但不会改变会话 ID 序列。
+            // 这里按“列表结构或当前会话是否真的变化”决定是否同步滚动，避免打断用户手动滚动。
+            if (
+                sessionIdsSignature === previousSessionIdsSignature &&
+                activeSessionId === previousActiveSessionId
+            ) {
+                return;
+            }
+
             syncHighlightedSession({
                 preferActive: activeSessionId !== previousActiveSessionId,
                 scroll: activeSessionId !== previousActiveSessionId,
@@ -698,5 +849,50 @@
         box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-300) 78%, white);
         box-decoration-break: clone;
         -webkit-box-decoration-break: clone;
+    }
+
+    .history-session-status-indicator {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 0.75rem;
+        height: 0.75rem;
+    }
+
+    .history-session-status-spinner {
+        height: 0.68rem;
+        width: 0.68rem;
+        border: 1.5px solid var(--color-primary-500);
+        border-right-color: transparent;
+        border-radius: 999px;
+        animation: history-status-spin 0.8s linear infinite;
+    }
+
+    .history-session-status-dot {
+        display: inline-flex;
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 999px;
+    }
+
+    .history-session-status-dot--waiting {
+        background: #eab308;
+        box-shadow: 0 0 0 3px color-mix(in srgb, #fef3c7 85%, transparent);
+    }
+
+    .history-session-status-dot--completed {
+        background: #16a34a;
+        box-shadow: 0 0 0 3px color-mix(in srgb, #dcfce7 88%, transparent);
+    }
+
+    .history-session-status-dot--failed {
+        background: #dc2626;
+        box-shadow: 0 0 0 3px color-mix(in srgb, #fee2e2 88%, transparent);
+    }
+
+    @keyframes history-status-spin {
+        to {
+            transform: rotate(360deg);
+        }
     }
 </style>

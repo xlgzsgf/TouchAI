@@ -46,6 +46,8 @@ export interface SessionEntity {
     last_message_preview: string | null;
     last_message_at: string | null;
     message_count: number;
+    status_badge_dismissed_turn_id: number | null;
+    pending_terminal_status: 'completed' | 'failed' | null;
     pinned_at: string | null;
     archived_at: string | null;
     created_at: string;
@@ -60,6 +62,7 @@ export interface SessionCreateData {
     last_message_preview?: string | null;
     last_message_at?: string | null;
     message_count?: number;
+    status_badge_dismissed_turn_id?: number | null;
     pinned_at?: string | null;
     archived_at?: string | null;
     created_at?: string;

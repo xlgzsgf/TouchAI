@@ -228,6 +228,7 @@ CREATE TABLE `sessions` (
 	`last_message_preview` text,
 	`last_message_at` text,
 	`message_count` integer DEFAULT 0 NOT NULL,
+	`status_badge_dismissed_turn_id` integer,
 	`pinned_at` text,
 	`archived_at` text,
 	`created_at` text DEFAULT (datetime('now')) NOT NULL,

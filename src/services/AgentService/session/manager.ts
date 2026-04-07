@@ -5,6 +5,7 @@ import { findMessagesBySessionId } from '@database/queries/messages';
 import type { ModelWithProvider } from '@database/queries/models';
 import {
     createSession as dbCreateSession,
+    dismissSessionTerminalStatus as dbDismissSessionTerminalStatus,
     findSessionById,
     listSessions as dbListSessions,
     type ListSessionsOptions,
@@ -51,6 +52,13 @@ export async function createSession(
  */
 export async function listSessions(options: ListSessionsOptions = {}): Promise<SessionEntity[]> {
     return dbListSessions(options);
+}
+
+/**
+ * 确认会话终态徽标。
+ */
+export async function dismissSessionTerminalStatus(sessionId: number): Promise<void> {
+    await dbDismissSessionTerminalStatus(sessionId);
 }
 
 /**

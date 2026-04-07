@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b3826a5a-45ff-410c-b95b-ace9075b4806",
+  "id": "00b925c3-9e9f-454c-ace7-362154d918ad",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "attachments": {
@@ -1616,6 +1616,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "status_badge_dismissed_turn_id": {
+          "name": "status_badge_dismissed_turn_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "pinned_at": {
           "name": "pinned_at",

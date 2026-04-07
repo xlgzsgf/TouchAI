@@ -5,13 +5,15 @@
 import { useAgent } from '@composables/agent';
 import type { SessionEntity } from '@database/types';
 import { sendNotification } from '@tauri-apps/plugin-notification';
-import { type Ref, ref } from 'vue';
+import { onUnmounted, type Ref, ref } from 'vue';
 
 import {
     type Index,
     isAttachmentSupported,
 } from '@/services/AgentService/infrastructure/attachments';
-import { listSessions } from '@/services/AgentService/session';
+import { dismissSessionTerminalStatus, listSessions } from '@/services/AgentService/session';
+import { eventService } from '@/services/EventService';
+import { AppEvent } from '@/services/EventService/types';
 import type { LoadedSessionInfo, SessionMessage } from '@/types/session';
 
 import type { PendingRequest, SearchModelOverride } from '../types';
@@ -64,6 +66,8 @@ export function useSearchRequestFlow(options: UseSearchRequestFlowOptions) {
     let sessionListLoadPromise: Promise<void> | null = null;
     let sessionListInFlightKey: string | null = null;
     let sessionListResolvedKey: string | null = null;
+    let stopSessionStatusListener: (() => void) | null = null;
+    let sessionStatusListenerDisposed = false;
 
     function buildSessionListRequestKey(): string {
         return JSON.stringify({
@@ -161,6 +165,37 @@ export function useSearchRequestFlow(options: UseSearchRequestFlowOptions) {
                 };
             }
         },
+    });
+
+    void eventService
+        .on(AppEvent.SESSION_TASK_STATUS_CHANGED, (event) => {
+            if (event.status !== 'completed' && event.status !== 'failed') {
+                return;
+            }
+
+            // 会话运行允许脱离当前页面继续进行；
+            // 旧会话进入终态时，当前页不一定还能收到 useAgent 的 onComplete/onError。
+            // 这里统一按全局状态事件作废历史列表缓存，保证 popup 能看到最新终态圆点。
+            invalidateSessionListCache({
+                refreshIfOpen: true,
+            });
+        })
+        .then((unlisten) => {
+            if (sessionStatusListenerDisposed) {
+                unlisten();
+                return;
+            }
+
+            stopSessionStatusListener = unlisten;
+        })
+        .catch((error) => {
+            console.error('[SearchView] Failed to subscribe session status events:', error);
+        });
+
+    onUnmounted(() => {
+        sessionStatusListenerDisposed = true;
+        stopSessionStatusListener?.();
+        stopSessionStatusListener = null;
     });
 
     function clearSessionState() {
@@ -324,6 +359,9 @@ export function useSearchRequestFlow(options: UseSearchRequestFlowOptions) {
     }
 
     async function openSession(sessionId: number): Promise<LoadedSessionInfo> {
+        // 切换会话时必须丢弃当前页面暂存的排队请求，
+        // 否则新会话会错误继承旧会话的“等待发送”锁态。
+        clearPendingRequestState();
         clearDraft({ preserveModelTag: true });
 
         const loadedSession = await openStoredSession(sessionId);
@@ -331,6 +369,13 @@ export function useSearchRequestFlow(options: UseSearchRequestFlowOptions) {
             modelId: loadedSession.modelId,
             providerId: loadedSession.providerId,
         };
+
+        try {
+            await dismissSessionTerminalStatus(sessionId);
+            invalidateSessionListCache();
+        } catch (error) {
+            console.error('[SearchView] Failed to dismiss session terminal status:', error);
+        }
 
         return loadedSession;
     }

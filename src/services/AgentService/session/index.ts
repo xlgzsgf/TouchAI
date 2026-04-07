@@ -8,6 +8,11 @@
  */
 export { buildSessionHistory, buildSessionHistoryFromData, loadSessionHistory } from './history';
 export type { SessionData } from './manager';
-export { createSession, getSessionData, listSessions } from './manager';
+export {
+    createSession,
+    dismissSessionTerminalStatus,
+    getSessionData,
+    listSessions,
+} from './manager';
 export { buildSessionTitle } from './title';
 export { loadSessionTransportMessages } from './transport';

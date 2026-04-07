@@ -7,6 +7,12 @@ import type { SessionTaskStatus } from '@/services/AgentService/task/types';
 import { eventService } from '@/services/EventService';
 import { AppEvent } from '@/services/EventService/types';
 
+function isActiveSessionStatus(
+    status: SessionTaskStatus
+): status is Extract<SessionTaskStatus, 'running' | 'waiting_approval'> {
+    return status === 'running' || status === 'waiting_approval';
+}
+
 /**
  * 会话状态订阅 composable
  *
@@ -14,30 +20,16 @@ import { AppEvent } from '@/services/EventService/types';
  */
 export function useSessionStatus() {
     const sessionStatuses = ref<Map<number, SessionTaskStatus>>(new Map());
-    const clearTimers = new Map<number, ReturnType<typeof setTimeout>>();
     let unsubscribe: (() => void) | null = null;
     let disposed = false;
 
-    function cancelPendingClear(sessionId: number) {
-        const timer = clearTimers.get(sessionId);
-        if (!timer) {
-            return;
-        }
-
-        clearTimeout(timer);
-        clearTimers.delete(sessionId);
-    }
-
     function setSessionStatus(sessionId: number, status: SessionTaskStatus) {
-        cancelPendingClear(sessionId);
-
         const nextStatuses = new Map(sessionStatuses.value);
         nextStatuses.set(sessionId, status);
         sessionStatuses.value = nextStatuses;
     }
 
     function clearSessionStatus(sessionId: number) {
-        cancelPendingClear(sessionId);
         if (!sessionStatuses.value.has(sessionId)) {
             return;
         }
@@ -47,31 +39,16 @@ export function useSessionStatus() {
         sessionStatuses.value = nextStatuses;
     }
 
-    function scheduleTerminalStatusClear(sessionId: number) {
-        cancelPendingClear(sessionId);
-
-        const timer = setTimeout(() => {
-            clearTimers.delete(sessionId);
-            clearSessionStatus(sessionId);
-        }, 1000);
-
-        clearTimers.set(sessionId, timer);
-    }
-
     /**
-     * 初始化：加载指定会话的当前状态
+     * 初始化时只回填仍由任务中心托管的活跃状态。
+     * 终态改由数据库持久化后，这里不再负责 completed/failed/cancelled。
      */
     const refreshAllStatuses = (sessionIds: number[]) => {
-        for (const timer of clearTimers.values()) {
-            clearTimeout(timer);
-        }
-        clearTimers.clear();
-
         const newStatuses = new Map<number, SessionTaskStatus>();
 
         for (const sessionId of sessionIds) {
             const status = sessionTaskCenter.getSessionStatus(sessionId);
-            if (status) {
+            if (status && isActiveSessionStatus(status.status)) {
                 newStatuses.set(sessionId, status.status);
             }
         }
@@ -84,16 +61,12 @@ export function useSessionStatus() {
      */
     void eventService
         .on(AppEvent.SESSION_TASK_STATUS_CHANGED, (event) => {
-            setSessionStatus(event.sessionId, event.status);
-
-            // 如果任务已终止，延迟清除状态
-            if (
-                event.status === 'completed' ||
-                event.status === 'failed' ||
-                event.status === 'cancelled'
-            ) {
-                scheduleTerminalStatusClear(event.sessionId);
+            if (isActiveSessionStatus(event.status)) {
+                setSessionStatus(event.sessionId, event.status);
+                return;
             }
+
+            clearSessionStatus(event.sessionId);
         })
         .then((unlisten) => {
             if (disposed) {
@@ -109,10 +82,6 @@ export function useSessionStatus() {
 
     onUnmounted(() => {
         disposed = true;
-        for (const timer of clearTimers.values()) {
-            clearTimeout(timer);
-        }
-        clearTimers.clear();
         unsubscribe?.();
         unsubscribe = null;
     });

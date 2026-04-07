@@ -22,5 +22,6 @@ export type {
     PositionCalculator,
     SerializablePopupConfig,
     SessionHistoryData,
+    SessionHistorySessionItem,
     WindowInfo,
 } from './types';

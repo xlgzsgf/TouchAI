@@ -61,6 +61,7 @@ export const sessions = sqliteTable(
         last_message_preview: text('last_message_preview'),
         last_message_at: text('last_message_at'),
         message_count: integer('message_count').notNull().default(0),
+        status_badge_dismissed_turn_id: integer('status_badge_dismissed_turn_id'),
         pinned_at: text('pinned_at'),
         archived_at: text('archived_at'),
         created_at: text('created_at')

@@ -3,6 +3,8 @@
 import type { SessionEntity } from '@database/types';
 import type { Component } from 'vue';
 
+import type { SessionTaskStatus } from '@/services/AgentService/task/types';
+
 /**
  * 弹窗窗口内容类型
  */
@@ -98,11 +100,15 @@ export interface ModelDropdownPopupItem {
     open_weights: number;
 }
 
+export interface SessionHistorySessionItem extends SessionEntity {
+    displayStatus: Exclude<SessionTaskStatus, 'cancelled'> | null;
+}
+
 /**
  * 历史会话弹窗数据
  */
 export interface SessionHistoryData {
-    sessions: SessionEntity[];
+    sessions: SessionHistorySessionItem[];
     activeSessionId: number | null;
     searchQuery: string;
     isLoading: boolean;
