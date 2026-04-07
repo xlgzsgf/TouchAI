@@ -98,40 +98,42 @@ async function executeCancelableBash(
 export function createBashApprovalRequest(
     args: Record<string, unknown>,
     config: BashToolConfig
-): ToolApprovalRequest | null {
+): Promise<ToolApprovalRequest | null> {
     const parsedApprovalPayload = parseToolArguments(
         BASH_TOOL_NAME,
         bashApprovalPayloadSchema,
         args
     );
-    const commandContext = resolveCommandContext(args, config);
-    const requestedReason = parsedApprovalPayload.reason ?? parsedApprovalPayload.description ?? '';
-    if (config.approvalMode === 'never') {
-        return null;
-    }
+    return resolveCommandContext(args, config).then((commandContext) => {
+        const requestedReason =
+            parsedApprovalPayload.reason ?? parsedApprovalPayload.description ?? '';
+        if (config.approvalMode === 'never') {
+            return null;
+        }
 
-    const matchedRule =
-        config.approvalMode === 'always'
-            ? { reason: '当前配置要求所有 Bash 命令都必须先批准。' }
-            : HIGH_RISK_RULES.find((rule) => rule.pattern.test(commandContext.command));
+        const matchedRule =
+            config.approvalMode === 'always'
+                ? { reason: '当前配置要求所有 Bash 命令都必须先批准。' }
+                : HIGH_RISK_RULES.find((rule) => rule.pattern.test(commandContext.command));
 
-    if (!matchedRule) {
-        return null;
-    }
+        if (!matchedRule) {
+            return null;
+        }
 
-    return {
-        title: '命令执行确认',
-        description: requestedReason,
-        command: commandContext.command,
-        riskLabel: '',
-        reason: matchedRule.reason,
-        commandLabel: '',
-        approveLabel: '批准',
-        rejectLabel: '拒绝',
-        enterHint: 'Enter',
-        escHint: 'Esc',
-        keyboardApproveDelayMs: 450,
-    };
+        return {
+            title: '命令执行确认',
+            description: requestedReason,
+            command: commandContext.command,
+            riskLabel: '',
+            reason: matchedRule.reason,
+            commandLabel: '',
+            approveLabel: '批准',
+            rejectLabel: '拒绝',
+            enterHint: 'Enter',
+            escHint: 'Esc',
+            keyboardApproveDelayMs: 450,
+        };
+    });
 }
 
 /**
@@ -147,7 +149,7 @@ export async function executeBashTool(
     config: BashToolConfig,
     context: BaseBuiltInToolExecutionContext
 ): Promise<BuiltInToolExecutionResult> {
-    const commandContext = resolveCommandContext(args, config);
+    const commandContext = await resolveCommandContext(args, config);
     const response = await executeCancelableBash(
         {
             executionId: context.callId,

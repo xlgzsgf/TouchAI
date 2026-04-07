@@ -98,6 +98,21 @@ async function throwIfCancelledAndMarkToolLog(options: {
  * 内置工具服务。
  */
 class BuiltInToolService {
+    private buildFailedToolResult(error: unknown): BuiltInToolExecutionResult {
+        const aiError = AiError.fromError(error);
+        if (aiError.is(AiErrorCode.REQUEST_CANCELLED)) {
+            throw aiError;
+        }
+
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return {
+            result: `Tool execution failed: ${errorMessage}`,
+            isError: true,
+            status: 'error',
+            errorMessage,
+        };
+    }
+
     /**
      * 生成当前可暴露给模型的内置工具定义。
      *
@@ -277,116 +292,6 @@ class BuiltInToolService {
             console.error('[BuiltInToolService] Failed to create built-in tool log:', error);
         }
 
-        // 4. 如果需要审批，先走审批。
-        await throwIfCancelledAndMarkToolLog({
-            signal: options.signal,
-            toolCallId: options.toolCall.id,
-            toolLogId,
-            callStartTime,
-        });
-        const approvalRequest = await this.buildApprovalRequest(
-            resolved,
-            options.toolArgs,
-            executionContext
-        );
-        if (approvalRequest) {
-            options.emitToolEvent({
-                type: 'approval_required',
-                callId: options.toolCall.id,
-                ...approvalRequest,
-            });
-
-            // 审批事件和日志状态要同步切到 pending，
-            // 这样数据库里的状态能和前端“正在等待用户决定”的 UI 保持一致。
-            await updateBuiltInToolLogByCallId(options.toolCall.id, {
-                status: 'awaiting_approval',
-                approval_state: 'pending',
-                approval_summary: approvalRequest.reason,
-            }).catch((error) => {
-                console.error(
-                    '[BuiltInToolService] Failed to update built-in tool approval state:',
-                    error
-                );
-            });
-
-            await throwIfCancelledAndMarkToolLog({
-                signal: options.signal,
-                toolCallId: options.toolCall.id,
-                toolLogId,
-                callStartTime,
-            });
-
-            const approved = options.requestToolApproval
-                ? await options.requestToolApproval({
-                      callId: options.toolCall.id,
-                      ...approvalRequest,
-                  })
-                : false;
-            await throwIfCancelledAndMarkToolLog({
-                signal: options.signal,
-                toolCallId: options.toolCall.id,
-                toolLogId,
-                callStartTime,
-            });
-            const resolutionText = approved ? '已批准执行此命令' : '用户已拒绝执行此命令';
-
-            options.emitToolEvent({
-                type: 'approval_resolved',
-                callId: options.toolCall.id,
-                approved,
-                resolutionText,
-            });
-
-            if (!approved) {
-                const durationMs = Date.now() - callStartTime;
-                await updateBuiltInToolLogByCallId(options.toolCall.id, {
-                    status: 'rejected',
-                    approval_state: 'rejected',
-                    approval_summary: approvalRequest.reason,
-                    duration_ms: durationMs,
-                    error_message: resolutionText,
-                }).catch((error) => {
-                    console.error(
-                        '[BuiltInToolService] Failed to update rejected built-in tool log:',
-                        error
-                    );
-                });
-
-                options.emitToolEvent({
-                    type: 'call_end',
-                    callId: options.toolCall.id,
-                    result: resolutionText,
-                    isError: true,
-                    durationMs,
-                    finalStatus: 'rejected',
-                });
-
-                // 被拒绝的工具调用也要产出一条结果文本，
-                // 否则 assistant 已经发出的 tool_call 会在后续消息历史里悬空。
-                return {
-                    toolCall: options.toolCall,
-                    builtInToolId: resolved.tool.id,
-                    result: resolutionText,
-                    isError: true,
-                    toolLogId,
-                    toolLogKind: 'builtin',
-                };
-            }
-
-            // 审批通过后再把日志切到 approved，
-            // 保证数据库只记录“已经落地的用户决策”，而不是中间态推测。
-            await updateBuiltInToolLogByCallId(options.toolCall.id, {
-                status: 'approved',
-                approval_state: 'approved',
-                approval_summary: approvalRequest.reason,
-            }).catch((error) => {
-                console.error(
-                    '[BuiltInToolService] Failed to update approved built-in tool log:',
-                    error
-                );
-            });
-        }
-
         let toolResult: BuiltInToolExecutionResult;
         try {
             await throwIfCancelledAndMarkToolLog({
@@ -395,6 +300,109 @@ class BuiltInToolService {
                 toolLogId,
                 callStartTime,
             });
+            const approvalRequest = await this.buildApprovalRequest(
+                resolved,
+                options.toolArgs,
+                executionContext
+            );
+            if (approvalRequest) {
+                options.emitToolEvent({
+                    type: 'approval_required',
+                    callId: options.toolCall.id,
+                    ...approvalRequest,
+                });
+
+                // 审批事件和日志状态要同步切到 pending，
+                // 这样数据库里的状态能和前端“正在等待用户决定”的 UI 保持一致。
+                await updateBuiltInToolLogByCallId(options.toolCall.id, {
+                    status: 'awaiting_approval',
+                    approval_state: 'pending',
+                    approval_summary: approvalRequest.reason,
+                }).catch((error) => {
+                    console.error(
+                        '[BuiltInToolService] Failed to update built-in tool approval state:',
+                        error
+                    );
+                });
+
+                await throwIfCancelledAndMarkToolLog({
+                    signal: options.signal,
+                    toolCallId: options.toolCall.id,
+                    toolLogId,
+                    callStartTime,
+                });
+
+                const approved = options.requestToolApproval
+                    ? await options.requestToolApproval({
+                          callId: options.toolCall.id,
+                          ...approvalRequest,
+                      })
+                    : false;
+                await throwIfCancelledAndMarkToolLog({
+                    signal: options.signal,
+                    toolCallId: options.toolCall.id,
+                    toolLogId,
+                    callStartTime,
+                });
+                const resolutionText = approved ? '已批准执行此命令' : '用户已拒绝执行此命令';
+
+                options.emitToolEvent({
+                    type: 'approval_resolved',
+                    callId: options.toolCall.id,
+                    approved,
+                    resolutionText,
+                });
+
+                if (!approved) {
+                    const durationMs = Date.now() - callStartTime;
+                    await updateBuiltInToolLogByCallId(options.toolCall.id, {
+                        status: 'rejected',
+                        approval_state: 'rejected',
+                        approval_summary: approvalRequest.reason,
+                        duration_ms: durationMs,
+                        error_message: resolutionText,
+                    }).catch((error) => {
+                        console.error(
+                            '[BuiltInToolService] Failed to update rejected built-in tool log:',
+                            error
+                        );
+                    });
+
+                    options.emitToolEvent({
+                        type: 'call_end',
+                        callId: options.toolCall.id,
+                        result: resolutionText,
+                        isError: true,
+                        durationMs,
+                        finalStatus: 'rejected',
+                    });
+
+                    // 被拒绝的工具调用也要产出一条结果文本，
+                    // 否则 assistant 已经发出的 tool_call 会在后续消息历史里悬空。
+                    return {
+                        toolCall: options.toolCall,
+                        builtInToolId: resolved.tool.id,
+                        result: resolutionText,
+                        isError: true,
+                        toolLogId,
+                        toolLogKind: 'builtin',
+                    };
+                }
+
+                // 审批通过后再把日志切到 approved，
+                // 保证数据库只记录“已经落地的用户决策”，而不是中间态推测。
+                await updateBuiltInToolLogByCallId(options.toolCall.id, {
+                    status: 'approved',
+                    approval_state: 'approved',
+                    approval_summary: approvalRequest.reason,
+                }).catch((error) => {
+                    console.error(
+                        '[BuiltInToolService] Failed to update approved built-in tool log:',
+                        error
+                    );
+                });
+            }
+
             // 5. 执行工具
             toolResult = await this.executeResolvedTool(
                 resolved,
@@ -402,8 +410,10 @@ class BuiltInToolService {
                 executionContext
             );
         } catch (error) {
-            const aiError = AiError.fromError(error);
-            if (aiError.is(AiErrorCode.REQUEST_CANCELLED)) {
+            try {
+                toolResult = this.buildFailedToolResult(error);
+            } catch (finalError) {
+                const aiError = AiError.fromError(finalError);
                 await markCancelledToolLog({
                     toolCallId: options.toolCall.id,
                     toolLogId,
@@ -411,18 +421,10 @@ class BuiltInToolService {
                 });
                 throw aiError;
             }
-
-            const errorMessage = error instanceof Error ? error.message : String(error);
             console.error(
                 `[BuiltInToolService] Built-in tool execution failed: ${options.toolCall.name}`,
                 error
             );
-            toolResult = {
-                result: `Tool execution failed: ${errorMessage}`,
-                isError: true,
-                status: 'error',
-                errorMessage,
-            };
         }
 
         const durationMs = Date.now() - callStartTime;

@@ -32,6 +32,7 @@
         useSearchPanelFocusRestore,
     } from './composables/useSearchPage';
     import { useSearchRequestFlow } from './composables/useSearchRequest';
+    import { useSearchWindowPin } from './composables/useSearchWindowPin';
     import { useSessionHistoryPopup } from './composables/useSessionHistoryPopup';
     import type {
         ConversationPanelHandle,
@@ -74,11 +75,11 @@
     const historyAnchorElement = ref<HTMLElement | null>(null);
     const pageContainer = ref<HTMLElement | null>(null);
     const approvalAttentionToken = ref(0);
-    const isPinned = ref(false);
     const isDragging = ref(false);
     const mcpStore = useMcpStore();
     const settingsStore = useSettingsStore();
     const { sessionStatuses, refreshAllStatuses: refreshSessionStatuses } = useSessionStatus();
+    const { isPinned, syncWindowPinState, setWindowPinned, toggleWindowPin } = useSearchWindowPin();
     const widgetBridgeWindow = window as Window & {
         sendPrompt?: (text: string) => void;
         openLink?: (url: string) => void;
@@ -167,13 +168,13 @@
         modelDropdownState,
     });
 
-    const { isDevMode, isDevBlurHideSuspended } = useSearchPageLifecycle({
+    useSearchPageLifecycle({
         pageContainer,
         controller,
         viewReady,
         isDragging,
         isPinned,
-        sessionHistory,
+        syncWindowPinState,
         clearSession,
     });
 
@@ -259,13 +260,14 @@
         rejectPendingToolApproval,
         promptPendingToolApprovalAttention,
         isQuickSearchOpen,
-        isDevMode,
-        isDevBlurHideSuspended,
         shouldTriggerQuickSearch,
         sessionHistoryPopupOpen,
         hideAllPopups,
         closeModelDropdown,
         openModelDropdown,
+        openHistoryDialog,
+        startNewSession: handleStartNewSession,
+        toggleWindowPin: handleToggleWindowPin,
         handleSubmit,
         clearAll,
         cancelRequest,
@@ -296,8 +298,16 @@
         quickSearchOpen.value = value;
     }
 
-    function handlePinChange(value: boolean) {
-        isPinned.value = value;
+    async function handlePinChange(value: boolean) {
+        try {
+            await setWindowPinned(value);
+        } catch (error) {
+            console.error('[SearchView] Failed to update window pin state:', error);
+            await sendNotification({
+                title: 'TouchAI - 置顶切换失败',
+                body: '窗口置顶状态更新失败，请稍后重试',
+            });
+        }
     }
 
     function promptPendingToolApprovalAttention() {
@@ -369,13 +379,6 @@
         });
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
-        if (event.ctrlKey && event.key === 'h') {
-            event.preventDefault();
-            void openHistoryDialog();
-        }
-    }
-
     async function handleHistoryOpenChange(payload: {
         open: boolean;
         anchorElement: HTMLElement | null;
@@ -432,10 +435,26 @@
     }
 
     async function handleStartNewSession() {
+        if (sessionHistory.value.length === 0) {
+            return;
+        }
+
         controller.closeQuickSearch();
         await hideAllPopups();
         startNewSession();
         await controller.focusSearchInput();
+    }
+
+    async function handleToggleWindowPin() {
+        try {
+            await toggleWindowPin();
+        } catch (error) {
+            console.error('[SearchView] Failed to toggle window pin state:', error);
+            await sendNotification({
+                title: 'TouchAI - 置顶切换失败',
+                body: '窗口置顶状态更新失败，请稍后重试',
+            });
+        }
     }
 
     async function handleOpenSession(sessionId: number) {
@@ -520,6 +539,9 @@
                 settingsStore.initialize(),
                 popupService.initialize(),
             ]);
+            await syncWindowPinState().catch((error) => {
+                console.error('[SearchView] Failed to sync window pin state on initialize:', error);
+            });
 
             viewReady.value = true;
 
@@ -587,7 +609,6 @@
     onMounted(() => {
         widgetBridgeWindow.sendPrompt = handleWidgetSendPrompt;
         widgetBridgeWindow.openLink = handleWidgetOpenLink;
-        window.addEventListener('keydown', handleKeyDown);
         void initialize();
     });
 
@@ -599,8 +620,6 @@
         if (widgetBridgeWindow.openLink === handleWidgetOpenLink) {
             delete widgetBridgeWindow.openLink;
         }
-
-        window.removeEventListener('keydown', handleKeyDown);
     });
 </script>
 
@@ -624,7 +643,6 @@
                 :is-loading="isLoading"
                 :error="error"
                 :is-pinned="isPinned"
-                :toolbar-disabled="isLoading || isWaitingForCompletion"
                 :history-open="sessionHistoryPopupOpen"
                 :approval-attention-token="approvalAttentionToken"
                 @pin-change="handlePinChange"

@@ -96,7 +96,7 @@ SELECT
     '执行终端命令',
     1,
     'high',
-    '{"approvalMode":"high_risk","defaultWorkingDirectory":"D:\\Project\\TouchAI","allowedWorkingDirectories":["D:\\Project\\TouchAI"],"timeoutMs":15000,"maxOutputChars":12000}'
+    '{"approvalMode":"high_risk","timeoutMs":15000,"maxOutputChars":12000}'
 WHERE NOT EXISTS (SELECT 1 FROM built_in_tools WHERE tool_id = 'bash');
 
 INSERT INTO built_in_tools (

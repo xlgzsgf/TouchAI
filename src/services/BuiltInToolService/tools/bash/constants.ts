@@ -51,8 +51,8 @@ export interface FormattedBashExecution {
  */
 export const DEFAULT_BASH_TOOL_CONFIG: BashToolConfig = {
     approvalMode: 'high_risk',
-    defaultWorkingDirectory: 'D:\\Project\\TouchAI',
-    allowedWorkingDirectories: ['D:\\Project\\TouchAI'],
+    defaultWorkingDirectory: '',
+    allowedWorkingDirectories: [],
     timeoutMs: 15000,
     maxOutputChars: 12000,
 };

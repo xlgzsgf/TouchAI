@@ -141,7 +141,7 @@
                 type="button"
                 class="toolbar-button"
                 :class="isPinned ? 'toolbar-button--pinned' : ''"
-                aria-label="固定会话面板"
+                aria-label="窗口置顶"
                 :aria-pressed="isPinned"
                 data-drag-exclude="true"
                 @mousedown.stop

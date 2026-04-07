@@ -1,6 +1,9 @@
 <!-- Copyright (c) 2026. 千诚. Licensed under GPL v3 -->
 
 <script setup lang="ts">
+    import AppIcon from '@components/AppIcon.vue';
+    import { open } from '@tauri-apps/plugin-dialog';
+
     import type { BashApprovalMode, BashToolConfig } from '../types';
 
     interface Props {
@@ -39,6 +42,72 @@
             ...next,
         });
     }
+
+    async function pickDirectory(defaultPath?: string): Promise<string | null> {
+        try {
+            const picked = await open({
+                directory: true,
+                multiple: false,
+                defaultPath: defaultPath?.trim() || undefined,
+                title: '选择目录',
+            });
+            return typeof picked === 'string' ? picked : null;
+        } catch (error) {
+            console.error('[BashToolConfig] Failed to pick directory:', error);
+            return null;
+        }
+    }
+
+    function normalizeDirectoryList(directories: string[]): string[] {
+        return directories
+            .map((value) => value.trim())
+            .filter((value, index, items) => value.length > 0 && items.indexOf(value) === index);
+    }
+
+    async function addAllowedWorkingDirectory() {
+        const selected = await pickDirectory(props.modelValue.defaultWorkingDirectory);
+        if (!selected) {
+            return;
+        }
+
+        patch({
+            allowedWorkingDirectories: normalizeDirectoryList([
+                ...props.modelValue.allowedWorkingDirectories,
+                selected,
+            ]),
+        });
+    }
+
+    function removeAllowedWorkingDirectory(index: number) {
+        const next = [...props.modelValue.allowedWorkingDirectories];
+        next.splice(index, 1);
+        patch({
+            allowedWorkingDirectories: normalizeDirectoryList(next),
+        });
+    }
+
+    async function pickDefaultWorkingDirectory() {
+        const selected = await pickDirectory(props.modelValue.defaultWorkingDirectory);
+        if (!selected) {
+            return;
+        }
+        patch({ defaultWorkingDirectory: selected });
+    }
+
+    async function pickAllowedWorkingDirectory(index: number) {
+        const selected = await pickDirectory(
+            props.modelValue.allowedWorkingDirectories[index] ||
+                props.modelValue.defaultWorkingDirectory
+        );
+        if (!selected) {
+            return;
+        }
+        const next = [...props.modelValue.allowedWorkingDirectories];
+        next[index] = selected;
+        patch({
+            allowedWorkingDirectories: normalizeDirectoryList(next),
+        });
+    }
 </script>
 
 <template>
@@ -70,7 +139,95 @@
                 </button>
             </div>
 
-            <div class="mt-5 grid gap-4 md:grid-cols-2">
+            <div class="mt-5 space-y-4">
+                <div>
+                    <label class="block font-serif text-sm font-medium text-gray-600">
+                        默认工作目录
+                    </label>
+                    <div class="mt-1.5 flex gap-2">
+                        <input
+                            :value="modelValue.defaultWorkingDirectory"
+                            :disabled="disabled"
+                            readonly
+                            type="text"
+                            spellcheck="false"
+                            class="focus:border-primary-400 flex-1 rounded-lg border border-gray-200 px-3 py-2 font-mono text-sm text-gray-900 transition-colors focus:outline-none disabled:bg-gray-50"
+                            placeholder="未设置时运行时默认桌面"
+                        />
+                        <button
+                            type="button"
+                            :disabled="disabled"
+                            class="text-gray-400 transition-colors hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-60"
+                            title="选择目录"
+                            aria-label="选择目录"
+                            @click="pickDefaultWorkingDirectory"
+                        >
+                            <AppIcon name="folder-open" class="h-5 w-5" />
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between">
+                        <label class="block font-serif text-sm font-medium text-gray-600">
+                            允许工作目录
+                        </label>
+                        <button
+                            type="button"
+                            :disabled="disabled"
+                            class="text-gray-400 transition-colors hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-60"
+                            @click="addAllowedWorkingDirectory"
+                        >
+                            <AppIcon name="plus" class="h-5 w-5" />
+                        </button>
+                    </div>
+
+                    <div
+                        v-if="modelValue.allowedWorkingDirectories.length > 0"
+                        class="mt-2 space-y-2"
+                    >
+                        <div
+                            v-for="(directory, index) in modelValue.allowedWorkingDirectories"
+                            :key="index"
+                            class="flex gap-2"
+                        >
+                            <input
+                                :value="directory"
+                                :disabled="disabled"
+                                readonly
+                                type="text"
+                                spellcheck="false"
+                                class="focus:border-primary-400 flex-1 rounded-lg border border-gray-200 px-4 py-2.5 font-mono text-sm text-gray-900 transition-colors focus:outline-none disabled:bg-gray-50"
+                                placeholder="D:\\Project\\TouchAI"
+                            />
+                            <button
+                                type="button"
+                                :disabled="disabled"
+                                class="text-gray-400 transition-colors hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                title="选择目录"
+                                aria-label="选择目录"
+                                @click="pickAllowedWorkingDirectory(index)"
+                            >
+                                <AppIcon name="folder-open" class="h-5 w-5" />
+                            </button>
+                            <button
+                                type="button"
+                                :disabled="disabled"
+                                class="text-gray-400 transition-colors hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                @click="removeAllowedWorkingDirectory(index)"
+                            >
+                                <AppIcon name="x" class="h-5 w-5" />
+                            </button>
+                        </div>
+                    </div>
+                    <div
+                        v-else
+                        class="mt-2 rounded-xl border border-dashed border-gray-200 bg-gray-50/60 px-4 py-3 font-serif text-sm text-gray-500"
+                    >
+                        未设置时运行时允许全部路径
+                    </div>
+                </div>
+
                 <div>
                     <label class="block font-serif text-sm font-medium text-gray-600">
                         超时上限（毫秒）

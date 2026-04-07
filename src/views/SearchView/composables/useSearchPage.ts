@@ -264,7 +264,7 @@ interface UseSearchPageLifecycleOptions {
     viewReady: Ref<boolean>;
     isDragging: Ref<boolean>;
     isPinned: Ref<boolean>;
-    sessionHistory: Ref<SessionMessage[]>;
+    syncWindowPinState: () => Promise<boolean>;
     clearSession: () => void;
 }
 
@@ -283,12 +283,10 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
         viewReady,
         isDragging,
         isPinned,
-        sessionHistory,
+        syncWindowPinState,
         clearSession,
     } = options;
 
-    const isDevBlurHideSuspended = ref(false);
-    const isDevMode = import.meta.env.DEV;
     const settingsStore = useSettingsStore();
 
     let unlistenFocus: (() => void) | null = null;
@@ -303,8 +301,7 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
 
     const shouldHideOnBlur = computed(() => {
         if (isDragging.value) return false;
-        if (isDevMode && isDevBlurHideSuspended.value) return false;
-        return !(isPinned.value && sessionHistory.value.length > 0);
+        return !isPinned.value;
     });
 
     function recordHideTime() {
@@ -372,6 +369,14 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
         }
     }
 
+    async function syncWindowPinStateSafely(reason: 'initialize' | 'focus') {
+        try {
+            await syncWindowPinState();
+        } catch (error) {
+            console.error(`[SearchView] Failed to sync window pin state on ${reason}:`, error);
+        }
+    }
+
     async function startLifecycleOnceReady() {
         if (lifecycleInitialized || !viewReady.value) {
             return;
@@ -379,6 +384,7 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
 
         lifecycleInitialized = true;
         await initializeSearchView();
+        await syncWindowPinStateSafely('initialize');
         await initFocusListener();
         await runStartupTasks();
     }
@@ -390,6 +396,7 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
             await nextTick();
             await controller.focusSearchInput();
             await controller.loadActiveModel();
+            await syncWindowPinStateSafely('focus');
         });
 
         unlistenBlur = await getCurrentWindow().listen('tauri://blur', async () => {
@@ -441,11 +448,6 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
         unlistenAiModelsUpdated?.();
         unlistenAiModelsUpdated = null;
     });
-
-    return {
-        isDevMode,
-        isDevBlurHideSuspended,
-    };
 }
 
 interface UseSearchOverlayMachineOptions {
@@ -537,7 +539,7 @@ export function useSearchOverlayMachine(options: UseSearchOverlayMachineOptions)
     };
 }
 
-interface UseSearchKeyboardOptions {
+export interface UseSearchKeyboardOptions {
     viewReady: Ref<boolean>;
     queryText: Ref<string>;
     cursorContext: Ref<SearchCursorContext>;
@@ -553,17 +555,299 @@ interface UseSearchKeyboardOptions {
     rejectPendingToolApproval: (callId?: string) => boolean;
     promptPendingToolApprovalAttention: () => void;
     isQuickSearchOpen: ComputedRef<boolean>;
-    isDevMode: boolean;
-    isDevBlurHideSuspended: Ref<boolean>;
     shouldTriggerQuickSearch: (query: string) => boolean;
     sessionHistoryPopupOpen: Ref<boolean>;
     hideAllPopups: () => Promise<void>;
     closeModelDropdown: () => Promise<void>;
     openModelDropdown: () => Promise<void>;
+    openHistoryDialog: () => Promise<void>;
+    startNewSession: () => Promise<void>;
+    toggleWindowPin: () => Promise<void>;
     handleSubmit: (query: string) => Promise<void>;
     clearAll: () => void;
     cancelRequest: () => void;
     clearSession: () => void;
+}
+
+function isEscapeKey(event: KeyboardEvent): boolean {
+    return event.key === 'Escape' || event.key === 'Esc' || event.code === 'Escape';
+}
+
+/**
+ * 审批期间仍允许 Enter / Esc 作为决策快捷键，其余会改变输入内容的按键
+ * 统一视为“误把编辑框当作可输入状态”，应拦截并把注意力引导回批准按钮。
+ */
+function isTypingAttemptDuringApproval(event: KeyboardEvent): boolean {
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+        return false;
+    }
+
+    return event.key.length === 1 || event.key === 'Backspace' || event.key === 'Delete';
+}
+
+function isPlainCtrlShortcut(event: KeyboardEvent, key: string): boolean {
+    return (
+        event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === key
+    );
+}
+
+export function createSearchKeydownHandler(options: UseSearchKeyboardOptions) {
+    const {
+        viewReady,
+        queryText,
+        cursorContext,
+        modelOverride,
+        modelDropdownState,
+        controller,
+        sessionHistory,
+        pendingRequest,
+        isWaitingForCompletion,
+        isLoading,
+        pendingToolApproval,
+        approvePendingToolApproval,
+        rejectPendingToolApproval,
+        promptPendingToolApprovalAttention,
+        isQuickSearchOpen,
+        shouldTriggerQuickSearch,
+        sessionHistoryPopupOpen,
+        hideAllPopups,
+        closeModelDropdown,
+        openModelDropdown,
+        openHistoryDialog,
+        startNewSession,
+        toggleWindowPin,
+        handleSubmit,
+        clearAll,
+        cancelRequest,
+        clearSession,
+    } = options;
+
+    let lastBackspaceTime = 0;
+
+    return async function handleKeyDown(event: KeyboardEvent) {
+        if (!viewReady.value) {
+            return;
+        }
+
+        // 通过 window capture 层监听按键，确保在所有子组件之前拦截。
+        // 一旦某次事件已被处理（如 Escape 关闭弹窗），就不再让后续逻辑重复执行。
+        if (event.defaultPrevented) {
+            return;
+        }
+
+        // 工具审批态优先：避免用户误以为 Enter 是发送消息。
+        if (pendingToolApproval.value) {
+            if (isEscapeKey(event)) {
+                event.preventDefault();
+                event.stopPropagation();
+                rejectPendingToolApproval(pendingToolApproval.value.callId);
+                return;
+            }
+
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                event.stopPropagation();
+
+                // 小延迟用于防止“刚弹出审批卡就误按回车”导致误批准。
+                if (!event.shiftKey && Date.now() >= pendingToolApproval.value.keyboardApproveAt) {
+                    approvePendingToolApproval(pendingToolApproval.value.callId);
+                } else {
+                    promptPendingToolApprovalAttention();
+                }
+                return;
+            }
+
+            if (isTypingAttemptDuringApproval(event)) {
+                event.preventDefault();
+                event.stopPropagation();
+                promptPendingToolApprovalAttention();
+                return;
+            }
+        }
+
+        if (isPlainCtrlShortcut(event, 'h')) {
+            event.preventDefault();
+            event.stopPropagation();
+            await openHistoryDialog();
+            return;
+        }
+
+        if (isPlainCtrlShortcut(event, 'n')) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (sessionHistory.value.length > 0) {
+                await startNewSession();
+            }
+            return;
+        }
+
+        if (isPlainCtrlShortcut(event, 't')) {
+            event.preventDefault();
+            event.stopPropagation();
+            await toggleWindowPin();
+            return;
+        }
+
+        if (event.key === 'Tab' && sessionHistory.value.length > 0) {
+            event.preventDefault();
+            controller.focusConversation();
+            return;
+        }
+
+        // Escape 作为 UI 状态回退键，优先收敛弹窗/请求，再处理输入清理。
+        if (isEscapeKey(event)) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (modelDropdownState.value.isOpen || sessionHistoryPopupOpen.value) {
+                await hideAllPopups();
+                return;
+            }
+
+            if (isLoading.value) {
+                cancelRequest();
+                return;
+            }
+
+            const hasSelectedModel = modelOverride.value.modelId;
+            if (!queryText.value.trim() && hasSelectedModel) {
+                modelOverride.value = createEmptyModelOverride();
+                return;
+            }
+
+            if (!queryText.value.trim() && sessionHistory.value.length === 0) {
+                await getCurrentWindow().hide();
+                return;
+            }
+
+            if (sessionHistory.value.length > 0) {
+                clearSession();
+                return;
+            }
+
+            clearAll();
+            return;
+        }
+
+        if (event.key === '@' && !modelDropdownState.value.isOpen) {
+            event.preventDefault();
+            await openModelDropdown();
+            return;
+        }
+
+        if (modelDropdownState.value.isOpen) {
+            if (['ArrowUp', 'ArrowDown', 'Enter'].includes(event.key)) {
+                event.preventDefault();
+                const payload: PopupKeydownPayload = {
+                    key: event.key,
+                    targetType: 'model-dropdown-popup',
+                };
+                void eventService.emit(AppEvent.POPUP_KEYDOWN, payload);
+                return;
+            }
+        }
+
+        if (isQuickSearchOpen.value) {
+            const hasHighlight = controller.isQuickSearchItemHighlighted();
+
+            if (hasHighlight) {
+                const directionMap = {
+                    ArrowUp: 'up',
+                    ArrowDown: 'down',
+                    ArrowLeft: 'left',
+                    ArrowRight: 'right',
+                } as const;
+                const direction = directionMap[event.key as keyof typeof directionMap];
+                if (direction) {
+                    event.preventDefault();
+                    controller.moveQuickSearchSelection(direction);
+                    return;
+                }
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    await controller.openHighlightedQuickSearchItem();
+                    return;
+                }
+            } else {
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    controller.moveQuickSearchSelection('down');
+                    return;
+                }
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    controller.closeQuickSearch();
+                    if (queryText.value.trim()) {
+                        await handleSubmit(queryText.value);
+                    }
+                    return;
+                }
+            }
+        }
+
+        if (!modelDropdownState.value.isOpen && !isQuickSearchOpen.value) {
+            if (event.key === 'ArrowDown') {
+                if (!shouldTriggerQuickSearch(queryText.value)) {
+                    return;
+                }
+
+                event.preventDefault();
+                controller.openQuickSearch();
+                return;
+            }
+
+            if (event.key === 'ArrowUp') {
+                if (cursorContext.value.isMultiLine) {
+                    return;
+                }
+                event.preventDefault();
+                if (queryText.value.trim()) {
+                    await handleSubmit(queryText.value);
+                }
+                return;
+            }
+        }
+
+        if (event.key === 'Backspace') {
+            if (modelDropdownState.value.isOpen) {
+                await closeModelDropdown();
+                return;
+            }
+
+            if (pendingRequest.value) {
+                const now = Date.now();
+                const timeSinceLastBackspace = now - lastBackspaceTime;
+                lastBackspaceTime = now;
+
+                // 双击退格清空待发送请求，避免额外的确认弹窗阻塞输入流。
+                if (timeSinceLastBackspace < DOUBLE_BACKSPACE_INTERVAL) {
+                    event.preventDefault();
+                    pendingRequest.value = null;
+                    isWaitingForCompletion.value = false;
+                    lastBackspaceTime = 0;
+                }
+                return;
+            }
+
+            if (modelOverride.value.modelId && cursorContext.value.cursorAtStart) {
+                event.preventDefault();
+                modelOverride.value = createEmptyModelOverride();
+                return;
+            }
+        }
+
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            if (queryText.value.trim()) {
+                await handleSubmit(queryText.value);
+            }
+        }
+    };
 }
 
 interface UseSearchModelDropdownCoordinatorOptions {
@@ -774,52 +1058,9 @@ export function useSearchModelDropdownCoordinator(
  * @returns void
  */
 export function useSearchKeyboard(options: UseSearchKeyboardOptions) {
-    const {
-        viewReady,
-        queryText,
-        cursorContext,
-        modelOverride,
-        modelDropdownState,
-        controller,
-        sessionHistory,
-        pendingRequest,
-        isWaitingForCompletion,
-        isLoading,
-        pendingToolApproval,
-        approvePendingToolApproval,
-        rejectPendingToolApproval,
-        promptPendingToolApprovalAttention,
-        isQuickSearchOpen,
-        isDevMode,
-        isDevBlurHideSuspended,
-        shouldTriggerQuickSearch,
-        sessionHistoryPopupOpen,
-        hideAllPopups,
-        closeModelDropdown,
-        openModelDropdown,
-        handleSubmit,
-        clearAll,
-        cancelRequest,
-        clearSession,
-    } = options;
+    const { viewReady, modelDropdownState, sessionHistoryPopupOpen, hideAllPopups } = options;
 
-    let lastBackspaceTime = 0;
-
-    function isEscapeKey(event: KeyboardEvent): boolean {
-        return event.key === 'Escape' || event.key === 'Esc' || event.code === 'Escape';
-    }
-
-    /**
-     * 审批期间仍允许 Enter / Esc 作为决策快捷键，其余会改变输入内容的按键
-     * 统一视为“误把编辑框当作可输入状态”，应拦截并把注意力引导回批准按钮。
-     */
-    function isTypingAttemptDuringApproval(event: KeyboardEvent): boolean {
-        if (event.ctrlKey || event.metaKey || event.altKey) {
-            return false;
-        }
-
-        return event.key.length === 1 || event.key === 'Backspace' || event.key === 'Delete';
-    }
+    const handleKeyDown = createSearchKeydownHandler(options);
 
     function handleSearchWindowMouseDown(event: MouseEvent) {
         if (!viewReady.value) {
@@ -855,208 +1096,6 @@ export function useSearchKeyboard(options: UseSearchKeyboardOptions) {
 
         if (event.target === document.body) {
             void native.window.hideSearchWindow();
-        }
-    }
-
-    async function handleKeyDown(event: KeyboardEvent) {
-        if (!viewReady.value) {
-            return;
-        }
-
-        // 通过 window capture 层监听按键，确保在所有子组件之前拦截。
-        // 一旦某次事件已被处理（如 Escape 关闭弹窗），就不再让后续逻辑重复执行。
-        if (event.defaultPrevented) {
-            return;
-        }
-
-        // 工具审批态优先：避免用户误以为 Enter 是发送消息。
-        if (pendingToolApproval.value) {
-            if (isEscapeKey(event)) {
-                event.preventDefault();
-                event.stopPropagation();
-                rejectPendingToolApproval(pendingToolApproval.value.callId);
-                return;
-            }
-
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                event.stopPropagation();
-
-                // 小延迟用于防止“刚弹出审批卡就误按回车”导致误批准。
-                if (!event.shiftKey && Date.now() >= pendingToolApproval.value.keyboardApproveAt) {
-                    approvePendingToolApproval(pendingToolApproval.value.callId);
-                } else {
-                    promptPendingToolApprovalAttention();
-                }
-                return;
-            }
-
-            if (isTypingAttemptDuringApproval(event)) {
-                event.preventDefault();
-                event.stopPropagation();
-                promptPendingToolApprovalAttention();
-                return;
-            }
-        }
-
-        if (isDevMode && event.key === 'Control' && !event.repeat) {
-            isDevBlurHideSuspended.value = !isDevBlurHideSuspended.value;
-            return;
-        }
-
-        if (event.key === 'Tab' && sessionHistory.value.length > 0) {
-            event.preventDefault();
-            controller.focusConversation();
-            return;
-        }
-
-        // Escape 作为 UI 状态回退键，优先收敛弹窗/请求，再处理输入清理。
-        if (isEscapeKey(event)) {
-            event.preventDefault();
-            event.stopPropagation();
-
-            if (modelDropdownState.value.isOpen || sessionHistoryPopupOpen.value) {
-                await hideAllPopups();
-                return;
-            }
-
-            if (isLoading.value) {
-                cancelRequest();
-                return;
-            }
-
-            const hasSelectedModel = modelOverride.value.modelId;
-            if (!queryText.value.trim() && hasSelectedModel) {
-                modelOverride.value = createEmptyModelOverride();
-                return;
-            }
-
-            if (!queryText.value.trim() && sessionHistory.value.length === 0) {
-                await getCurrentWindow().hide();
-                return;
-            }
-
-            if (sessionHistory.value.length > 0) {
-                clearSession();
-                return;
-            }
-
-            clearAll();
-            return;
-        }
-
-        if (event.key === '@' && !modelDropdownState.value.isOpen) {
-            event.preventDefault();
-            await openModelDropdown();
-            return;
-        }
-
-        if (modelDropdownState.value.isOpen) {
-            if (['ArrowUp', 'ArrowDown', 'Enter'].includes(event.key)) {
-                event.preventDefault();
-                const payload: PopupKeydownPayload = {
-                    key: event.key,
-                    targetType: 'model-dropdown-popup',
-                };
-                void eventService.emit(AppEvent.POPUP_KEYDOWN, payload);
-                return;
-            }
-        }
-
-        if (isQuickSearchOpen.value) {
-            const hasHighlight = controller.isQuickSearchItemHighlighted();
-
-            if (hasHighlight) {
-                const directionMap = {
-                    ArrowUp: 'up',
-                    ArrowDown: 'down',
-                    ArrowLeft: 'left',
-                    ArrowRight: 'right',
-                } as const;
-                const direction = directionMap[event.key as keyof typeof directionMap];
-                if (direction) {
-                    event.preventDefault();
-                    controller.moveQuickSearchSelection(direction);
-                    return;
-                }
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    await controller.openHighlightedQuickSearchItem();
-                    return;
-                }
-            } else {
-                if (event.key === 'ArrowDown') {
-                    event.preventDefault();
-                    controller.moveQuickSearchSelection('down');
-                    return;
-                }
-                if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    controller.closeQuickSearch();
-                    if (queryText.value.trim()) {
-                        await handleSubmit(queryText.value);
-                    }
-                    return;
-                }
-            }
-        }
-
-        if (!modelDropdownState.value.isOpen && !isQuickSearchOpen.value) {
-            if (event.key === 'ArrowDown') {
-                if (!shouldTriggerQuickSearch(queryText.value)) {
-                    return;
-                }
-
-                event.preventDefault();
-                controller.openQuickSearch();
-                return;
-            }
-
-            if (event.key === 'ArrowUp') {
-                if (cursorContext.value.isMultiLine) {
-                    return;
-                }
-                event.preventDefault();
-                if (queryText.value.trim()) {
-                    await handleSubmit(queryText.value);
-                }
-                return;
-            }
-        }
-
-        if (event.key === 'Backspace') {
-            if (modelDropdownState.value.isOpen) {
-                await closeModelDropdown();
-                return;
-            }
-
-            if (pendingRequest.value) {
-                const now = Date.now();
-                const timeSinceLastBackspace = now - lastBackspaceTime;
-                lastBackspaceTime = now;
-
-                // 双击退格清空待发送请求，避免额外的确认弹窗阻塞输入流。
-                if (timeSinceLastBackspace < DOUBLE_BACKSPACE_INTERVAL) {
-                    event.preventDefault();
-                    pendingRequest.value = null;
-                    isWaitingForCompletion.value = false;
-                    lastBackspaceTime = 0;
-                }
-                return;
-            }
-
-            if (modelOverride.value.modelId && cursorContext.value.cursorAtStart) {
-                event.preventDefault();
-                modelOverride.value = createEmptyModelOverride();
-                return;
-            }
-        }
-
-        if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            if (queryText.value.trim()) {
-                await handleSubmit(queryText.value);
-            }
         }
     }
 

@@ -1,6 +1,7 @@
 // Copyright (c) 2026. 千诚. Licensed under GPL v3
 
 import type { BuiltInBashExecutionResponse } from '@services/NativeService';
+import { desktopDir } from '@tauri-apps/api/path';
 
 import { parseToolArguments, parseToolConfigJson } from '../../utils/toolSchema';
 import {
@@ -17,6 +18,10 @@ function normalizeDirectoryPath(path: string): string {
 }
 
 function isWithinAllowedDirectory(path: string, allowlist: string[]): boolean {
+    if (allowlist.length === 0) {
+        return true;
+    }
+
     const normalizedPath = normalizeDirectoryPath(path);
     return allowlist.some((allowedPath) => {
         const normalizedAllowed = normalizeDirectoryPath(allowedPath);
@@ -37,6 +42,19 @@ export function parseBashToolConfig(configJson: string | null): BashToolConfig {
     return parseToolConfigJson(bashToolConfigSchema, configJson, DEFAULT_BASH_TOOL_CONFIG);
 }
 
+async function resolveDefaultWorkingDirectory(config: BashToolConfig): Promise<string> {
+    if (config.defaultWorkingDirectory.trim()) {
+        return config.defaultWorkingDirectory;
+    }
+
+    const desktopPath = (await desktopDir()).trim().replace(/[\\/]+$/, '');
+    if (!desktopPath) {
+        throw new Error('Bash tool requires a default working directory.');
+    }
+
+    return desktopPath;
+}
+
 /**
  * 把模型传入的参数整理为可直接执行的命令上下文。
  *
@@ -44,15 +62,11 @@ export function parseBashToolConfig(configJson: string | null): BashToolConfig {
  * @param config 当前 Bash 工具配置。
  * @returns 已校验的命令与工作目录。
  */
-export function resolveCommandContext(args: Record<string, unknown>, config: BashToolConfig) {
+export async function resolveCommandContext(args: Record<string, unknown>, config: BashToolConfig) {
     const parsedArgs = parseToolArguments(BASH_TOOL_NAME, bashCommandContextSchema, args);
     const command = parsedArgs.command;
     const requestedDirectory = parsedArgs.workingDirectory;
-    const workingDirectory = requestedDirectory || config.defaultWorkingDirectory;
-
-    if (!workingDirectory) {
-        throw new Error('Bash tool requires a default working directory.');
-    }
+    const workingDirectory = requestedDirectory || (await resolveDefaultWorkingDirectory(config));
 
     if (!isWithinAllowedDirectory(workingDirectory, config.allowedWorkingDirectories)) {
         throw new Error(`Working directory is outside the allowed scope: ${workingDirectory}`);

@@ -14,6 +14,7 @@ import IconEdit from '~icons/bx/edit-alt';
 import IconError from '~icons/bx/error';
 import IconFile from '~icons/bx/file';
 import IconFileBlank from '~icons/bx/file-blank';
+import IconFolderOpen from '~icons/bx/folder-open';
 import IconHide from '~icons/bx/hide';
 import IconHistory from '~icons/bx/history';
 import IconInfoCircle from '~icons/bx/info-circle';
@@ -48,6 +49,7 @@ export const appIconMap = {
     eye: IconShow,
     'eye-off': IconHide,
     file: IconFile,
+    'folder-open': IconFolderOpen,
     history: IconHistory,
     'information-circle': IconInfoCircle,
     llm: IconBrain,
