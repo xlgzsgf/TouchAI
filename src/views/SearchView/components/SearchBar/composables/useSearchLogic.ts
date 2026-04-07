@@ -332,7 +332,9 @@ export function useSearchInput(
         }
 
         const currentTag = getModelTag(ed);
-        if (!modelOverride.value.modelId) {
+        const selectedModelId = modelSelection.selectedModelId.value;
+        const selectedProviderId = modelSelection.selectedProviderId.value;
+        if (!selectedModelId || selectedProviderId === null) {
             if (currentTag) {
                 runControlledTagSync(() => removeModelTag(ed));
             }
@@ -341,16 +343,16 @@ export function useSearchInput(
 
         const modelName = modelSelection.selectedModelName.value;
         if (!modelName) {
-            if (currentTag && currentTag.modelId !== modelOverride.value.modelId) {
+            if (currentTag && currentTag.modelId !== selectedModelId) {
                 runControlledTagSync(() => removeModelTag(ed));
             }
             return;
         }
 
         const nextTag = {
-            modelId: modelOverride.value.modelId,
+            modelId: selectedModelId,
             modelName,
-            providerId: modelOverride.value.providerId,
+            providerId: selectedProviderId,
         };
 
         if (isSameModelTag(currentTag, nextTag)) {
@@ -421,8 +423,8 @@ export function useSearchInput(
 
     watch(
         () => [
-            modelOverride.value.modelId,
-            modelOverride.value.providerId,
+            modelSelection.selectedModelId.value,
+            modelSelection.selectedProviderId.value,
             modelSelection.selectedModelName.value,
             modelSelection.isModelDropdownOpen.value,
         ],

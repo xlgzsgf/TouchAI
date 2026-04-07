@@ -67,6 +67,7 @@ export function useModelSelection(
     });
 
     const activeModel = ref<ModelWithProvider | null>(null);
+    const hasResolvedActiveModel = ref(false);
     const resolvedOverrideModel = ref<ModelWithProvider | null>(null);
     // 缓存原始模型列表，供 handleModelSelect 使用，避免重复查询数据库。
     const availableModels = ref<ModelWithProvider[]>([]);
@@ -100,9 +101,23 @@ export function useModelSelection(
             ? resolvedOverrideModel.value
             : null;
     });
-    const selectedModelId = computed(() => modelOverride.value.modelId);
+    const hasExplicitModelOverride = computed(() => {
+        const { modelId, providerId } = modelOverride.value;
+        if (!modelId || providerId === null || !hasResolvedActiveModel.value) {
+            return false;
+        }
+
+        return (
+            modelId !== activeModel.value?.model_id || providerId !== activeModel.value?.provider_id
+        );
+    });
+    const selectedModelId = computed(() =>
+        hasExplicitModelOverride.value ? modelOverride.value.modelId : null
+    );
     const selectedModelName = computed(() => selectedModel.value?.name ?? null);
-    const selectedProviderId = computed(() => modelOverride.value.providerId);
+    const selectedProviderId = computed(() =>
+        hasExplicitModelOverride.value ? modelOverride.value.providerId : null
+    );
 
     // 3. 当前活动模型加载
     /**
@@ -116,6 +131,8 @@ export function useModelSelection(
         } catch (error) {
             console.error('[SearchBar] Failed to load active model:', error);
             activeModel.value = null;
+        } finally {
+            hasResolvedActiveModel.value = true;
         }
     }
 
