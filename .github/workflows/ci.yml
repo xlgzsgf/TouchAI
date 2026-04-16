@@ -84,5 +84,7 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: touchai-portable-windows
-                  path: src-tauri/target/release/TouchAI.exe
+                  path: |
+                      src-tauri/target/release/TouchAI.exe
+                      src-tauri/target/release/_up_/**/*
                   if-no-files-found: warn
