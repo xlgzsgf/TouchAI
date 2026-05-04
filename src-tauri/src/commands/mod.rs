@@ -3,6 +3,7 @@
 //! 命令入口模块。
 pub mod autostart;
 pub mod built_in_tools;
+pub mod clipboard;
 pub mod database;
 pub mod mcp;
 pub mod paths;
@@ -28,6 +29,9 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         window::resize_window_height,
         shortcut::register_global_shortcut,
         shortcut::get_shortcut_status,
+        clipboard::read_clipboard_payload,
+        clipboard::consume_shortcut_auto_paste_payload,
+        clipboard::write_clipboard_text,
         autostart::enable_autostart,
         autostart::disable_autostart,
         autostart::is_autostart_enabled,

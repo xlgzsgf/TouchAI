@@ -2219,6 +2219,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "html5gum"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12d29324a6ba370667998f63c6dd2b2511e2297f07e827f69026684907adc3b5"
+
+[[package]]
 name = "http"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6460,6 +6466,7 @@ dependencies = [
  "cc",
  "clipboard-rs",
  "futures",
+ "html5gum",
  "image",
  "log",
  "quote",

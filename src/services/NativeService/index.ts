@@ -1,5 +1,6 @@
 import { autostart } from './autostart';
 import { builtInTools } from './builtInTools';
+import { clipboard } from './clipboard';
 import { database } from './database';
 import { log } from './log';
 import * as mcp from './mcp';
@@ -20,6 +21,7 @@ export type {
 export type {
     BuiltInBashExecutionRequest,
     BuiltInBashExecutionResponse,
+    ClipboardPayload,
     PopupConfig,
     QuickSearchFileItem,
     QuickSearchStatus,
@@ -29,12 +31,24 @@ export type {
     TauriLogPayload,
 } from './types';
 
-export { autostart, builtInTools, database, log, mcp, paths, quickSearch, shortcut, window };
+export {
+    autostart,
+    builtInTools,
+    clipboard,
+    database,
+    log,
+    mcp,
+    paths,
+    quickSearch,
+    shortcut,
+    window,
+};
 
 export const native = {
     window,
     shortcut,
     autostart,
+    clipboard,
     builtInTools,
     log,
     database,

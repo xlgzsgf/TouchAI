@@ -58,6 +58,15 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), String> {
     app.manage(database_runtime);
     info!("Database runtime initialized.");
 
+    let clipboard_runtime = crate::core::system::clipboard::ClipboardRuntime::initialize()
+        .map_err(|error| {
+            error!("Failed to initialize clipboard runtime: {}", error);
+            show_initialization_failed_dialog(app);
+            error
+        })?;
+    app.manage(clipboard_runtime);
+    info!("Clipboard runtime initialized.");
+
     // 异步初始化字体资源
     let app_handle = app.handle().clone();
     tauri::async_runtime::spawn(async move {

@@ -46,6 +46,29 @@ export interface TauriLogPayload {
     line?: number;
 }
 
+export type ClipboardPayloadFragment =
+    | {
+          type: 'text';
+          text: string;
+      }
+    | {
+          type: 'image';
+          path: string;
+      }
+    | {
+          type: 'file';
+          path: string;
+      };
+
+export interface ClipboardPayload {
+    snapshotId: string;
+    observedAt: number;
+    text: string | null;
+    imagePaths: string[];
+    filePaths: string[];
+    fragments?: ClipboardPayloadFragment[];
+}
+
 export interface QuickShortcutItem {
     name: string;
     path: string;
