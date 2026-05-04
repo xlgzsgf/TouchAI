@@ -78,6 +78,12 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      // vue-draggable-plus 0.6.1 的 ESM bundle 会被当前 Rolldown RC 错误 tree-shake，
+      // 运行时改走该包自带 CJS 入口，保留拖拽功能并避开 Bt_mounted 未定义问题。
+      'vue-draggable-plus': resolve(
+        __dirname,
+        './node_modules/vue-draggable-plus/dist/vue-draggable-plus.cjs',
+      ),
       '@': resolve(__dirname, './src'),
       '@assets': resolve(__dirname, './src/assets'),
       '@components': resolve(__dirname, './src/components'),
