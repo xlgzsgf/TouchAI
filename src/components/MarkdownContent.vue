@@ -90,6 +90,8 @@
     import { computed } from 'vue';
     import { ref } from 'vue';
 
+    import { clipboardService } from '@/services/ClipboardService';
+
     interface Props {
         content: string;
         variant?: 'default' | 'reasoning';
@@ -172,7 +174,7 @@
         }
 
         try {
-            await navigator.clipboard.writeText(text);
+            await clipboardService.writeText(text);
             sendNotification({
                 title: 'TouchAI',
                 body: '已复制',

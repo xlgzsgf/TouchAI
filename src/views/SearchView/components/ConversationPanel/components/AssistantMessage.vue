@@ -118,6 +118,7 @@
     import { computed, ref, watch } from 'vue';
 
     import { SHOW_WIDGET_TOOL_NAME } from '@/services/BuiltInToolService/tools/widgetTool';
+    import { clipboardService } from '@/services/ClipboardService';
     import type {
         SessionMessage,
         ToolApprovalInfo,
@@ -265,7 +266,7 @@
     // 复制消息内容
     async function handleCopy() {
         try {
-            await navigator.clipboard.writeText(props.message.content);
+            await clipboardService.writeText(props.message.content);
             // 显示复制成功提示
             sendNotification({
                 title: 'TouchAI',
