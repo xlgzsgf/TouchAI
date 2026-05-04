@@ -10,5 +10,5 @@ pub mod search;
 pub mod settings;
 pub mod tray;
 
-pub use search::{hide_search_window, toggle_search_window_visibility};
+pub use search::{hide_search_window, show_search_window_from_shortcut};
 pub use settings::build_settings_window;

@@ -11,6 +11,7 @@ use windows::Win32::Graphics::Dwm::{
     DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE,
 };
 
+/// 隐藏主搜索窗口。
 pub fn hide_search_window(app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
@@ -20,13 +21,41 @@ pub fn hide_search_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-pub fn toggle_search_window_visibility(app_handle: &AppHandle) -> Result<(), String> {
-    if let Some(window) = app_handle.get_webview_window("main") {
-        if window.is_visible().map_err(|e| e.to_string())? {
-            window.hide().map_err(|e| e.to_string())?;
-        } else {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShortcutToggleAction {
+    ShowWithAutoPasteAuthorization,
+    HideOnly,
+}
+
+/// 根据窗口可见性决定快捷键切换动作。
+pub fn resolve_shortcut_toggle_action(is_visible: bool) -> ShortcutToggleAction {
+    if is_visible {
+        ShortcutToggleAction::HideOnly
+    } else {
+        ShortcutToggleAction::ShowWithAutoPasteAuthorization
+    }
+}
+
+/// 处理全局快捷键触发的搜索窗口显隐切换。
+pub fn show_search_window_from_shortcut(app_handle: &AppHandle) -> Result<(), String> {
+    let window = app_handle
+        .get_webview_window("main")
+        .ok_or_else(|| "Failed to get main window".to_string())?;
+    let action = resolve_shortcut_toggle_action(window.is_visible().map_err(|e| e.to_string())?);
+
+    // 只有 hidden -> shown 才授权 auto-paste；窗口已显示时快捷键只负责隐藏。
+    match action {
+        ShortcutToggleAction::ShowWithAutoPasteAuthorization => {
+            if let Some(runtime) =
+                app_handle.try_state::<crate::core::system::clipboard::ClipboardRuntime>()
+            {
+                runtime.authorize_shortcut_auto_paste();
+            }
             window.show().map_err(|e| e.to_string())?;
             window.set_focus().map_err(|e| e.to_string())?;
+        }
+        ShortcutToggleAction::HideOnly => {
+            window.hide().map_err(|e| e.to_string())?;
         }
     }
 
@@ -39,6 +68,7 @@ const DWMWCP_ROUND: u32 = 2;
 const DWMWA_COLOR_NONE: u32 = 0xFFFFFFFE;
 
 #[cfg(target_os = "windows")]
+/// 设置 Windows 搜索窗口圆角和边框样式。
 pub fn set_search_window_style(window: &tauri::WebviewWindow) -> Result<(), String> {
     let window_handle = window
         .window_handle()
@@ -75,6 +105,7 @@ pub fn set_search_window_style(window: &tauri::WebviewWindow) -> Result<(), Stri
 }
 
 #[cfg(not(target_os = "windows"))]
+/// 在非 Windows 平台跳过搜索窗口样式设置。
 pub fn set_search_window_style(_window: &tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }

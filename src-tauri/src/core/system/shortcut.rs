@@ -16,7 +16,7 @@ static REGISTRATION_STATUS: Mutex<(bool, Option<String>)> = Mutex::new((false, N
 pub fn create_shortcut_handler() -> impl Fn(&AppHandle, &Shortcut, ShortcutEvent) {
     move |app_handle, _received_shortcut, event| {
         if event.state == ShortcutState::Pressed {
-            let _ = crate::core::window::toggle_search_window_visibility(app_handle);
+            let _ = crate::core::window::show_search_window_from_shortcut(app_handle);
         }
     }
 }

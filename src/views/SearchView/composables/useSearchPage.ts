@@ -266,6 +266,7 @@ interface UseSearchPageLifecycleOptions {
     isPinned: Ref<boolean>;
     syncWindowPinState: () => Promise<boolean>;
     clearSession: () => void;
+    handleShortcutAutoPaste?: () => void | Promise<void>;
 }
 
 /**
@@ -285,6 +286,7 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
         isPinned,
         syncWindowPinState,
         clearSession,
+        handleShortcutAutoPaste,
     } = options;
 
     const settingsStore = useSettingsStore();
@@ -296,6 +298,7 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
     let stopReadyWatch: (() => void) | null = null;
     let lastHideTime: number | null = null;
     let lifecycleInitialized = false;
+    let shouldCheckShortcutAutoPaste = true;
 
     useWindowResize({ target: pageContainer, maxHeight: WINDOW_MAX_HEIGHT });
 
@@ -316,6 +319,9 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
         }
     }
 
+    /**
+     * 处理搜索窗口失焦后的隐藏、弹窗收敛和快捷键 auto-paste 检查标记。
+     */
     async function handleWindowBlur() {
         try {
             const appFocused = await native.window.isAppFocused();
@@ -327,6 +333,14 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
                     recordHideTime();
                     await native.window.hideSearchWindow();
                 }
+            }
+
+            const isVisible = await getCurrentWindow()
+                .isVisible()
+                .catch(() => true);
+            if (!isVisible) {
+                // 窗口真正隐藏后，下一次 focus 才检查快捷键 auto-paste 授权。
+                shouldCheckShortcutAutoPaste = true;
             }
         } catch (error) {
             console.error('[SearchView] Failed to handle window blur:', error);
@@ -389,6 +403,9 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
         await runStartupTasks();
     }
 
+    /**
+     * 初始化窗口 focus/blur 与页面级事件监听。
+     */
     async function initFocusListener() {
         unlistenFocus = await getCurrentWindow().listen('tauri://focus', async () => {
             checkAndClearIfTimeout();
@@ -397,6 +414,18 @@ export function useSearchPageLifecycle(options: UseSearchPageLifecycleOptions) {
             await controller.focusSearchInput();
             await controller.loadActiveModel();
             await syncWindowPinStateSafely('focus');
+
+            if (!shouldCheckShortcutAutoPaste) {
+                return;
+            }
+
+            // 同一次窗口显示周期只检查一次，避免 focus 抖动重复消费授权。
+            shouldCheckShortcutAutoPaste = false;
+            try {
+                await handleShortcutAutoPaste?.();
+            } catch (error) {
+                console.error('[SearchView] Failed to handle shortcut auto-paste:', error);
+            }
         });
 
         unlistenBlur = await getCurrentWindow().listen('tauri://blur', async () => {
@@ -585,16 +614,28 @@ function isTypingAttemptDuringApproval(event: KeyboardEvent): boolean {
     return event.key.length === 1 || event.key === 'Backspace' || event.key === 'Delete';
 }
 
-function isPlainCtrlShortcut(event: KeyboardEvent, key: string): boolean {
+/**
+ * 判断是否命中 Ctrl/Cmd 主修饰键快捷键。
+ */
+function isPrimaryModifierShortcut(
+    event: KeyboardEvent,
+    key: string,
+    options?: { shift?: boolean }
+): boolean {
+    const shift = options?.shift ?? false;
+    const hasPrimaryModifier = event.ctrlKey || event.metaKey;
+
     return (
-        event.ctrlKey &&
-        !event.metaKey &&
+        hasPrimaryModifier &&
         !event.altKey &&
-        !event.shiftKey &&
+        event.shiftKey === shift &&
         event.key.toLowerCase() === key
     );
 }
 
+/**
+ * 创建 SearchView 页面级键盘处理器。
+ */
 export function createSearchKeydownHandler(options: UseSearchKeyboardOptions) {
     const {
         viewReady,
@@ -669,14 +710,22 @@ export function createSearchKeydownHandler(options: UseSearchKeyboardOptions) {
             }
         }
 
-        if (isPlainCtrlShortcut(event, 'h')) {
+        if (isPrimaryModifierShortcut(event, 'h')) {
             event.preventDefault();
             event.stopPropagation();
             await openHistoryDialog();
             return;
         }
 
-        if (isPlainCtrlShortcut(event, 'n')) {
+        if (isPrimaryModifierShortcut(event, 'l')) {
+            event.preventDefault();
+            event.stopPropagation();
+            await hideAllPopups();
+            await controller.focusSearchInput();
+            return;
+        }
+
+        if (isPrimaryModifierShortcut(event, 'n')) {
             event.preventDefault();
             event.stopPropagation();
 
@@ -686,10 +735,35 @@ export function createSearchKeydownHandler(options: UseSearchKeyboardOptions) {
             return;
         }
 
-        if (isPlainCtrlShortcut(event, 't')) {
+        if (isPrimaryModifierShortcut(event, 'm')) {
+            event.preventDefault();
+            event.stopPropagation();
+            await openModelDropdown();
+            return;
+        }
+
+        if (isPrimaryModifierShortcut(event, 'p')) {
             event.preventDefault();
             event.stopPropagation();
             await toggleWindowPin();
+            return;
+        }
+
+        if (isPrimaryModifierShortcut(event, '.')) {
+            if (!isLoading.value) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            cancelRequest();
+            return;
+        }
+
+        if (isPrimaryModifierShortcut(event, 'backspace') && queryText.value.trim()) {
+            event.preventDefault();
+            event.stopPropagation();
+            clearAll();
             return;
         }
 

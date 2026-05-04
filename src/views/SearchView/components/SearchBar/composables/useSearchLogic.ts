@@ -416,10 +416,25 @@ export function useSearchInput(
             }
         }
 
-        for (const nextTag of nextTags) {
+        // mixed payload 中多张图片可能落在同一文本 offset，用计数保持原相对顺序。
+        const sameOffsetInsertionCounts = new Map<number, number>();
+        for (const [index, nextTag] of nextTags.entries()) {
             const currentTag = currentById.get(nextTag.attachmentId);
             if (!currentTag) {
-                runControlledTagSync(() => insertAttachmentTag(ed, nextTag));
+                const draftInsertionOffset = attachments.value[index]?.draftInsertionOffset;
+                const sameOffsetIndex =
+                    typeof draftInsertionOffset === 'number'
+                        ? (sameOffsetInsertionCounts.get(draftInsertionOffset) ?? 0)
+                        : undefined;
+                runControlledTagSync(() =>
+                    insertAttachmentTag(ed, nextTag, {
+                        textOffset: draftInsertionOffset,
+                        sameOffsetIndex,
+                    })
+                );
+                if (typeof draftInsertionOffset === 'number') {
+                    sameOffsetInsertionCounts.set(draftInsertionOffset, sameOffsetIndex! + 1);
+                }
                 continue;
             }
 
@@ -451,6 +466,7 @@ export function useSearchInput(
                 type: attachment.type,
                 preview: attachment.preview ?? null,
                 supportStatus: attachment.supportStatus,
+                draftInsertionOffset: attachment.draftInsertionOffset ?? null,
             })),
         }),
         () => {

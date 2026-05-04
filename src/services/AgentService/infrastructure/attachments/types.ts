@@ -16,4 +16,8 @@ export interface AttachmentIndex {
     preview?: string;
     mimeType?: string;
     supportStatus?: AttachmentSupportStatus;
+    /**
+     * 剪贴板 mixed payload 导入时，附件应插入到纯文本草稿的哪个字符位置。
+     */
+    draftInsertionOffset?: number;
 }

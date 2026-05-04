@@ -12,6 +12,7 @@
 
     import { mcpManager } from '@/services/AgentService/infrastructure/mcp';
     import type { SessionTaskStatus } from '@/services/AgentService/task/types';
+    import { clipboardService } from '@/services/ClipboardService';
     import { useMcpStore } from '@/stores/mcp';
     import { useSettingsStore } from '@/stores/settings';
 
@@ -43,6 +44,7 @@
         SearchModelDropdownState,
         SearchModelOverride,
     } from './types';
+    import { canAutoPasteIntoDraft } from './utils/clipboardDraft';
 
     defineOptions({
         name: 'SearchViewPage',
@@ -97,20 +99,21 @@
 
     const {
         handleModelChange,
+        createAttachmentFromClipboardPath,
         removeAttachment,
         clearAttachments,
         getSupportedAttachments,
         getUnsupportedAttachmentMessage,
-        importClipboardAttachments,
     } = useSearchAttachments({
         attachments,
     });
 
-    const { clearDraft, handlePaste } = useSearchDraftController({
+    const { clearDraft, handlePaste, importClipboardPayload } = useSearchDraftController({
         queryText,
+        attachments,
         modelOverride,
         clearAttachments,
-        importClipboardAttachments,
+        createAttachmentFromClipboardPath,
     });
 
     const {
@@ -176,6 +179,7 @@
         isPinned,
         syncWindowPinState,
         clearSession,
+        handleShortcutAutoPaste: tryShortcutAutoPaste,
     });
 
     function isDisplayableSessionStatus(
@@ -314,14 +318,46 @@
         approvalAttentionToken.value += 1;
     }
 
+    /**
+     * 统一处理页面捕获到的粘贴事件。
+     */
     function handlePagePaste(event: ClipboardEvent) {
         if (pendingToolApproval.value) {
             event.preventDefault();
+            event.stopPropagation();
             promptPendingToolApprovalAttention();
             return;
         }
 
+        // capture 层接管 paste，阻止 Tiptap 和页面同时处理同一次粘贴导致文本重复。
+        event.preventDefault();
+        event.stopPropagation();
         void handlePaste();
+    }
+
+    /**
+     * 在快捷键唤起窗口后尝试 auto-paste。
+     */
+    async function tryShortcutAutoPaste() {
+        //1. 只有空白草稿/空会话才 auto-paste，避免覆盖用户已经建立的上下文。
+        if (
+            !canAutoPasteIntoDraft({
+                queryText: queryText.value,
+                attachmentCount: attachments.value.length,
+                sessionMessageCount: sessionHistory.value.length,
+                hasModelOverride: Boolean(modelOverride.value.modelId),
+            })
+        ) {
+            return;
+        }
+
+        //2. native 消费成功才投影，并且 auto-paste 路径统一裁掉首尾空白。
+        const payload = await clipboardService.consumeShortcutAutoPastePayload(3000);
+        if (!payload) {
+            return;
+        }
+
+        await importClipboardPayload(payload, { trimTextBoundary: true });
     }
 
     async function closeSessionHistoryPopup() {
@@ -631,7 +667,7 @@
             'search-view-container bg-background-primary relative flex h-full w-full flex-col items-center justify-start overflow-hidden rounded-lg backdrop-blur-xl focus:outline-none',
             isLoading ? 'loading' : '',
         ]"
-        @paste="handlePagePaste"
+        @paste.capture="handlePagePaste"
     >
         <div
             v-if="viewReady && sessionHistory.length > 0"

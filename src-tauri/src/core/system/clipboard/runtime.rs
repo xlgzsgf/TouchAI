@@ -32,7 +32,7 @@ use super::{
 #[derive(Default)]
 struct ClipboardRuntimeState {
     latest_snapshot: Option<ClipboardSnapshot>,
-    pending_shortcut_open_seq: Option<u64>,
+    pending_shortcut_auto_paste_seq: Option<u64>,
     last_auto_pasted_snapshot_id: Option<String>,
 }
 
@@ -53,19 +53,19 @@ impl ClipboardRuntimeState {
         self.latest_snapshot = None;
     }
 
-    /// 标记一次由全局快捷键触发的窗口打开。
-    fn mark_shortcut_open(&mut self) {
-        self.pending_shortcut_open_seq = Some(next_shortcut_open_seq());
+    /// 授权下一次由全局快捷键触发的 auto-paste。
+    fn authorize_shortcut_auto_paste(&mut self) {
+        self.pending_shortcut_auto_paste_seq = Some(next_shortcut_auto_paste_seq());
     }
 
-    /// 消费符合快捷键门闩、新鲜度和去重条件的 auto-paste payload。
+    /// 消费符合快捷键授权、新鲜度和去重条件的 auto-paste payload。
     fn consume_shortcut_auto_paste_payload(
         &mut self,
         max_age_ms: u64,
         now_ms: u64,
     ) -> Option<ClipboardPayload> {
-        //1. 先消费快捷键门闩：没有门闩说明不是本轮全局快捷键唤起，直接拒绝。
-        let _shortcut_open_seq = self.pending_shortcut_open_seq.take()?;
+        //1. 先消费一次性快捷键授权：没有授权说明不是本轮全局快捷键唤起，直接拒绝。
+        let _shortcut_auto_paste_seq = self.pending_shortcut_auto_paste_seq.take()?;
         let snapshot = self.latest_snapshot.clone()?;
 
         //2. 使用首次观察时间判断新鲜度，避免同内容反复读取时延长 auto-paste 窗口。
@@ -175,10 +175,10 @@ impl ClipboardRuntime {
         Ok(())
     }
 
-    /// 为下一次窗口 focus 标记快捷键 auto-paste 门闩。
-    pub fn mark_shortcut_open(&self) {
+    /// 授权下一次窗口 focus 尝试快捷键 auto-paste。
+    pub fn authorize_shortcut_auto_paste(&self) {
         if let Ok(mut state) = self.inner.state.lock() {
-            state.mark_shortcut_open();
+            state.authorize_shortcut_auto_paste();
         }
     }
 
@@ -401,10 +401,10 @@ impl ClipboardHandler for ClipboardRuntimeWatcher {
     }
 }
 
-/// 生成下一次快捷键打开序号。
-fn next_shortcut_open_seq() -> u64 {
-    static NEXT_SHORTCUT_OPEN_SEQ: AtomicU64 = AtomicU64::new(1);
-    NEXT_SHORTCUT_OPEN_SEQ.fetch_add(1, Ordering::Relaxed)
+/// 生成下一次快捷键 auto-paste 授权序号。
+fn next_shortcut_auto_paste_seq() -> u64 {
+    static NEXT_SHORTCUT_AUTO_PASTE_SEQ: AtomicU64 = AtomicU64::new(1);
+    NEXT_SHORTCUT_AUTO_PASTE_SEQ.fetch_add(1, Ordering::Relaxed)
 }
 
 /// 返回当前毫秒时间戳。

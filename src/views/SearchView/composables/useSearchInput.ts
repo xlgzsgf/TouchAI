@@ -2,7 +2,6 @@
  * SearchView 输入层。
  * 统一承载草稿、附件与 QuickSearch 的输入侧编排，保持输入业务收敛。
  */
-import { readClipboard, type ReadClipboardItem } from 'tauri-plugin-clipboard-x-api';
 import { computed, type Ref, ref, watch } from 'vue';
 
 import {
@@ -11,6 +10,8 @@ import {
     type Index,
     isAttachmentSupported,
 } from '@/services/AgentService/infrastructure/attachments';
+import { clipboardService } from '@/services/ClipboardService';
+import type { ClipboardPayload } from '@/services/NativeService/types';
 import type { SessionMessage } from '@/types/session';
 
 import type {
@@ -20,6 +21,7 @@ import type {
     SearchModelOverride,
     SearchPageController,
 } from '../types';
+import { applyClipboardPayloadToDraft } from '../utils/clipboardDraft';
 
 interface UseSearchAttachmentsOptions {
     attachments?: Ref<Index[]>;
@@ -27,9 +29,14 @@ interface UseSearchAttachmentsOptions {
 
 interface UseSearchDraftControllerOptions {
     queryText: Ref<string>;
+    attachments: Ref<Index[]>;
     modelOverride: Ref<SearchModelOverride>;
     clearAttachments: () => void;
-    importClipboardAttachments: () => Promise<Index[]>;
+    createAttachmentFromClipboardPath: (type: 'image' | 'file', path: string) => Promise<Index>;
+}
+
+interface ImportClipboardPayloadOptions {
+    trimTextBoundary?: boolean;
 }
 
 interface UseQuickSearchCoordinatorOptions {
@@ -154,57 +161,14 @@ export function useSearchAttachments(options: UseSearchAttachmentsOptions = {}) 
         return attachment;
     }
 
-    /**
-     * 从剪贴板读取图片和文件，并纳入当前输入草稿。
-     *
-     * @returns 本次新加入的附件列表。
-     */
-    async function importClipboardAttachments() {
-        try {
-            const clipboard: Partial<{
-                text: { type: 'text'; value: string; count: number };
-                rtf: { type: 'rtf'; value: string; count: number };
-                html: { type: 'html'; value: string; count: number };
-                image: ReadClipboardItem<'image'>;
-                files: { type: 'files'; value: string[]; count: number };
-            }> = await readClipboard();
-
-            const createdAttachments: Index[] = [];
-
-            if (clipboard.image) {
-                createdAttachments.push(
-                    await createNormalizedAttachment('image', clipboard.image.value)
-                );
-            }
-
-            if (clipboard.files?.value?.length) {
-                const createdFiles = await Promise.all(
-                    clipboard.files.value.map((filePath) =>
-                        createNormalizedAttachment('file', filePath)
-                    )
-                );
-                createdAttachments.push(...createdFiles);
-            }
-
-            if (createdAttachments.length > 0) {
-                attachments.value.push(...createdAttachments);
-            }
-
-            return createdAttachments;
-        } catch (error) {
-            console.error('[SearchView] Failed to import clipboard attachments:', error);
-            return [];
-        }
-    }
-
     return {
         attachments,
         handleModelChange,
+        createAttachmentFromClipboardPath: createNormalizedAttachment,
         removeAttachment,
         clearAttachments,
         getSupportedAttachments,
         getUnsupportedAttachmentMessage,
-        importClipboardAttachments,
     };
 }
 
@@ -216,7 +180,13 @@ export function useSearchAttachments(options: UseSearchAttachmentsOptions = {}) 
  * @returns 草稿清理与粘贴处理方法。
  */
 export function useSearchDraftController(options: UseSearchDraftControllerOptions) {
-    const { queryText, modelOverride, clearAttachments, importClipboardAttachments } = options;
+    const {
+        queryText,
+        attachments,
+        modelOverride,
+        clearAttachments,
+        createAttachmentFromClipboardPath,
+    } = options;
 
     /**
      * 统一回收当前输入草稿。
@@ -238,18 +208,42 @@ export function useSearchDraftController(options: UseSearchDraftControllerOption
     }
 
     /**
-     * 从剪贴板导入附件并写回页面 draft。
-     * 编辑器标签由 SearchBar 消费受控 `attachments` 后自行投影，不再由页面手工调用子组件命令。
-     *
-     * @returns void
+     * 将剪贴板 payload 导入当前搜索草稿。
+     */
+    async function importClipboardPayload(
+        payload: ClipboardPayload,
+        options: ImportClipboardPayloadOptions = {}
+    ) {
+        // 显式粘贴和 auto-paste 共享投影入口，避免文本/附件合并规则分叉。
+        await applyClipboardPayloadToDraft(
+            payload,
+            {
+                queryText,
+                attachments,
+                appendText: (current, next) =>
+                    [current, next].filter(Boolean).join(current ? '\n' : ''),
+                createAttachment: createAttachmentFromClipboardPath,
+            },
+            options
+        );
+    }
+
+    /**
+     * 从剪贴板读取显式粘贴 payload 并写入草稿。
      */
     async function handlePaste() {
-        await importClipboardAttachments();
+        const payload = await clipboardService.readExplicitPastePayload();
+        if (!payload) {
+            return;
+        }
+
+        await importClipboardPayload(payload, { trimTextBoundary: true });
     }
 
     return {
         clearDraft,
         handlePaste,
+        importClipboardPayload,
     };
 }
 
