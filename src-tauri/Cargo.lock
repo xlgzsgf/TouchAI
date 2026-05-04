@@ -4558,6 +4558,7 @@ dependencies = [
  "cookie",
  "cookie_store",
  "encoding_rs",
+ "futures-channel",
  "futures-core",
  "futures-util",
  "h2",
@@ -5789,20 +5790,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tauri-plugin-clipboard-x"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26fed9a9b3b514c8d8081b3b5b984ebc72b2e9816a50a38f0103fe80daf480ab"
-dependencies = [
- "clipboard-rs",
- "fs_extra",
- "serde",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.17",
-]
-
-[[package]]
 name = "tauri-plugin-dialog"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6471,9 +6458,11 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "cc",
+ "clipboard-rs",
  "futures",
  "image",
  "log",
+ "quote",
  "raw-window-handle",
  "reqwest",
  "rmcp",
@@ -6482,8 +6471,8 @@ dependencies = [
  "sqlx",
  "tauri",
  "tauri-build",
+ "tauri-codegen",
  "tauri-plugin-autostart",
- "tauri-plugin-clipboard-x",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-fs-pro",

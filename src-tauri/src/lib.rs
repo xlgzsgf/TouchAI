@@ -35,7 +35,6 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_clipboard_x::init())
         .plugin(tauri_plugin_fs_pro::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())

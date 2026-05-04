@@ -17,6 +17,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 cc = "1.1"
+tauri-codegen = "~2.5.2"
+quote = "1"
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
@@ -33,7 +35,6 @@ log = "0.4"
 image = "0.25"
 base64 = "0.22"
 time = { version = "0.3", features = ["macros"] }
-tauri-plugin-clipboard-x = "2.0.1"
 tauri-plugin-fs-pro = "2.4.0"
 tauri-plugin-fs = "2"
 tauri-plugin-process = "2"
@@ -49,8 +50,9 @@ rmcp = { version = "0.8", features = [
     "transport-sse-client-reqwest",
     "transport-streamable-http-client-reqwest",
 ] }
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.12", features = ["json", "stream", "blocking"] }
 futures = "0.3"
+clipboard-rs = "0.2.4"
 
 [features]
 mcp-bridge = ["dep:tauri-plugin-mcp-bridge"]

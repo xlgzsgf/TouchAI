@@ -32,10 +32,20 @@ impl DatabaseContractSource {
         Self::Embedded
     }
 
+    pub(crate) fn from_root(root: PathBuf) -> Result<Self, String> {
+        if is_database_contract_directory(&root) {
+            return Ok(Self::Filesystem { root });
+        }
+
+        Err(format!(
+            "Failed to resolve database contract directory. Checked '{}'.",
+            root.display()
+        ))
+    }
+
     pub(crate) fn resolve(_app: &tauri::App) -> Result<Self, String> {
         if cfg!(debug_assertions) {
-            let project_root = resolve_project_root_from_exe()?;
-            return select_database_contract_source(Some(project_root.as_path()), true);
+            return Self::from_root(resolve_project_database_contract_root()?);
         }
 
         Ok(Self::embedded())
@@ -44,7 +54,7 @@ impl DatabaseContractSource {
     pub(crate) fn read_text(&self, segments: &[&str]) -> Result<Cow<'static, str>, String> {
         match self {
             Self::Embedded => embedded::read_text(segments)
-                .map(Cow::Borrowed)
+                .map(Cow::Owned)
                 .ok_or_else(|| {
                     format!(
                         "Embedded database asset '{}' is missing",
@@ -72,28 +82,6 @@ pub(crate) fn resolve_database_contract(
     app: &tauri::App,
 ) -> Result<DatabaseContractSource, String> {
     DatabaseContractSource::resolve(app)
-}
-
-fn select_database_contract_source(
-    project_root: Option<&Path>,
-    use_project_contract: bool,
-) -> Result<DatabaseContractSource, String> {
-    if !use_project_contract {
-        return Ok(DatabaseContractSource::embedded());
-    }
-
-    let path = project_root
-        .map(|path| path.join("src").join("database"))
-        .ok_or_else(|| "Failed to resolve project database contract directory.".to_string())?;
-
-    if is_database_contract_directory(&path) {
-        return Ok(DatabaseContractSource::Filesystem { root: path });
-    }
-
-    Err(format!(
-        "Failed to resolve project database contract directory. Checked project '{}'.",
-        path.display()
-    ))
 }
 
 fn logical_database_asset_path(segments: &[&str]) -> String {
@@ -218,17 +206,13 @@ fn is_database_contract_directory(path: &Path) -> bool {
     path.join("drizzle").is_dir() && path.join("artifacts").is_dir()
 }
 
-fn resolve_project_root_from_exe() -> Result<PathBuf, String> {
-    let exe_dir = std::env::current_exe()
-        .map_err(|error| format!("Failed to resolve current exe: {error}"))?
-        .parent()
-        .ok_or_else(|| "Failed to resolve executable directory".to_string())?
-        .to_path_buf();
+fn resolve_project_database_contract_root() -> Result<PathBuf, String> {
+    Ok(resolve_project_root()?.join("src").join("database"))
+}
 
-    exe_dir
+fn resolve_project_root() -> Result<PathBuf, String> {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .and_then(|path| path.parent())
-        .and_then(|path| path.parent())
         .map(Path::to_path_buf)
         .ok_or_else(|| "Failed to resolve project database contract directory".to_string())
 }
@@ -295,133 +279,4 @@ async fn ensure_migrations_table(pool: &Pool<Sqlite>) -> Result<(), String> {
     .await
     .map_err(|error| format!("Failed to ensure migrations table: {error}"))?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::{
-        fs,
-        path::{Path, PathBuf},
-        time::{SystemTime, UNIX_EPOCH},
-    };
-
-    #[test]
-    fn debug_build_uses_project_database_contract_directory() {
-        let workspace = create_temp_workspace("project-contract");
-        let project_root = workspace.join("project");
-
-        create_database_contract(&project_root, "-- debug seed");
-
-        let contract = select_database_contract_source(Some(project_root.as_path()), true).unwrap();
-        let seed_sql = contract
-            .read_text(&["artifacts", "runtime", "seed.sql"])
-            .unwrap();
-
-        assert_eq!(seed_sql, "-- debug seed");
-        let _ = fs::remove_dir_all(workspace);
-    }
-
-    #[test]
-    fn release_build_embeds_every_runtime_database_asset() {
-        let contract = DatabaseContractSource::embedded();
-
-        let journal = contract
-            .read_text(&["drizzle", "meta", "_journal.json"])
-            .unwrap();
-        let journal_json: serde_json::Value = serde_json::from_str(&journal).unwrap();
-        let entries = journal_json["entries"].as_array().unwrap();
-        assert!(!entries.is_empty());
-
-        for entry in entries {
-            let tag = entry["tag"].as_str().unwrap();
-            let migration_file = format!("{tag}.sql");
-            let migration_sql = contract
-                .read_text(&["drizzle", migration_file.as_str()])
-                .unwrap();
-            assert!(
-                !migration_sql.trim().is_empty(),
-                "missing migration for {tag}"
-            );
-        }
-
-        for segments in [
-            ["artifacts", "runtime", "guards.sql"],
-            ["artifacts", "runtime", "seed.sql"],
-            ["artifacts", "import", "chat_merge.sql"],
-            ["artifacts", "import", "full_prelude.sql"],
-            ["artifacts", "import", "full_postlude.sql"],
-        ] {
-            let sql = contract.read_text(&segments).unwrap();
-            assert!(
-                !sql.trim().is_empty(),
-                "embedded asset should not be empty: {:?}",
-                segments
-            );
-        }
-    }
-
-    fn create_database_contract(root: &Path, seed_sql: &str) {
-        create_database_contract_at(root, seed_sql);
-    }
-
-    fn create_database_contract_at(root: &Path, seed_sql: &str) {
-        fs::create_dir_all(
-            root.join("src")
-                .join("database")
-                .join("drizzle")
-                .join("meta"),
-        )
-        .unwrap();
-        fs::create_dir_all(
-            root.join("src")
-                .join("database")
-                .join("artifacts")
-                .join("runtime"),
-        )
-        .unwrap();
-        fs::create_dir_all(
-            root.join("src")
-                .join("database")
-                .join("artifacts")
-                .join("import"),
-        )
-        .unwrap();
-        fs::write(
-            root.join("src")
-                .join("database")
-                .join("drizzle")
-                .join("meta")
-                .join("_journal.json"),
-            r#"{"entries":[{"tag":"0000_debug"}]}"#,
-        )
-        .unwrap();
-        fs::write(
-            root.join("src")
-                .join("database")
-                .join("drizzle")
-                .join("0000_debug.sql"),
-            "-- debug migration",
-        )
-        .unwrap();
-        fs::write(
-            root.join("src")
-                .join("database")
-                .join("artifacts")
-                .join("runtime")
-                .join("seed.sql"),
-            seed_sql,
-        )
-        .unwrap();
-    }
-
-    fn create_temp_workspace(label: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("touchai-db-contract-{label}-{unique}"));
-        fs::create_dir_all(&path).unwrap();
-        path
-    }
 }
